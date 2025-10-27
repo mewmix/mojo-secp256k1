@@ -1,6 +1,0 @@
-[submodule "keccak"]
-	path = keccak
-	url = https://github.com/mewmix/keccak256_mojo
-[submodule "decimojo"]
-	path = decimojo
-	url = https://github.com/forfudan/decimojo
