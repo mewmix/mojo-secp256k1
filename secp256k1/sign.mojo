@@ -3,7 +3,7 @@
 from decimojo import BigInt
 from decimojo.bigint.bigint import BigUInt
 from keccak import keccak256_bytes
-from .rfc6979_keccak import rfc6979_keccak
+from .rfc6979 import rfc6979_sha256
 
 
 fn make_bigint(var words: List[UInt32]) -> BigInt:
@@ -375,37 +375,33 @@ fn ecdsa_sign_keccak(msg32: List[Int], seckey32: List[Int]) raises -> SigCompact
         raise Error("invalid secret key (zero)")
 
     var e = mod_positive(bytes_to_int_be(msg32), CURVE_N)
-    var seed = rfc6979_keccak(msg32, seckey32)
-    var counter = 0
+    var e_bytes = int_to_bytes32_be(e)
+    var nonce = rfc6979_sha256(e_bytes, seckey32)
+    var attempts = 0
 
-    while counter < 1024:
-        var input_len = len(seed) + 4
-        var material = [0] * input_len
-        for i in range(len(seed)):
-            material[i] = seed[i] & 0xFF
-        material[input_len - 4] = (counter >> 24) & 0xFF
-        material[input_len - 3] = (counter >> 16) & 0xFF
-        material[input_len - 2] = (counter >> 8) & 0xFF
-        material[input_len - 1] = counter & 0xFF
-
-        var k_bytes = keccak256_bytes(material, input_len)
+    while attempts < 1024:
+        var k_bytes = nonce.next()
+        attempts += 1
         var k = mod_positive(bytes_to_int_be(k_bytes), CURVE_N)
-        counter += 1
 
         if k.is_zero():
+            nonce.reseed()
             continue
 
         var R = point_mul(k, generator_point())
         if R.infinity:
+            nonce.reseed()
             continue
 
         var r = mod_positive(R.x, CURVE_N)
         if r.is_zero():
+            nonce.reseed()
             continue
 
         var kinv = mod_inv(k, CURVE_N)
         var s = mod_positive(kinv * mod_positive(e + (r * priv), CURVE_N), CURVE_N)
         if s.is_zero():
+            nonce.reseed()
             continue
 
         if s > HALF_CURVE_N:
