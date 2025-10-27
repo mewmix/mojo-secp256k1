@@ -1,6 +1,6 @@
 # mojo-secp256k1
 
-Deterministic secp256k1 signing primitives implemented in Mojo with BigInt-backed field and scalar arithmetic. The repository vendors forks of [DeciMojo](https://github.com/forfudan/decimojo) and our Keccak-256 implementation to provide a pure Mojo playground. A top-level [pixi](https://pixi.sh) environment drives both Mojo builds and the Python reference checks.
+Deterministic secp256k1 signing primitives implemented in Mojo with BigInt-backed field and scalar arithmetic. The repository vendors forks of [DeciMojo](https://github.com/forfudan/decimojo) and our [Keccak-256](https://github.com/mewmix/keccak256_mojo) implementation to provide a pure Mojo playground. A top-level [pixi](https://pixi.sh) environment drives both Mojo builds and the Python reference checks.
 
 ## Prerequisites
 - Mojo ≥ 0.25.7 (`mojo --version`)
