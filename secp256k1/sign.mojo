@@ -41,6 +41,7 @@ alias CURVE_N = make_bigint(
         UInt32(115792),
     )
 )
+alias B = BigInt(7)
 alias TWO_POW_256 = make_bigint(
     List[UInt32](
         UInt32(129639936),
