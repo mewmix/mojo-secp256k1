@@ -332,6 +332,26 @@ fn generator_point() -> Point:
     p.y = GEN_Y
     return p^
 
+fn pubkey_from_seckey(seckey32: List[Int]) raises -> Point:
+    if len(seckey32) != 32:
+        raise Error("secret key must be 32 bytes")
+    var priv = mod_positive(bytes_to_int_be(seckey32), CURVE_N)
+    if priv.is_zero():
+        raise Error("invalid secret key (zero)")
+    return point_mul(priv, generator_point())
+
+fn pubkey_serialize_uncompressed_xy(p: Point) raises -> List[Int]:
+    if p.infinity:
+        raise Error("cannot serialize point at infinity")
+    var out = [0] * 64
+    var xb = int_to_bytes32_be(p.x)
+    var yb = int_to_bytes32_be(p.y)
+    @parameter
+    for i in range(32):
+        out[i] = xb[i] & 0xFF
+        out[32 + i] = yb[i] & 0xFF
+    return out.copy()
+
 
 fn bytes_to_int_be(data: List[Int]) -> BigInt:
     var acc = BigInt(0)
@@ -404,14 +424,13 @@ fn ecdsa_sign_keccak(msg32: List[Int], seckey32: List[Int]) raises -> SigCompact
             nonce.reseed()
             continue
 
-        if s > HALF_CURVE_N:
-            s = CURVE_N - s
-
         var recid = 0
-        if R.y % BigInt(2) == BigInt(1):
-            recid = recid | 1
-        if R.x >= CURVE_N:
-            recid = recid | 2
+        if R.y % BigInt(2) != BigInt(0):
+            recid = 1
+
+        if s > HALF_CURVE_N:
+            recid ^= 1
+            s = CURVE_N - s
 
         var sig = SigCompact()
         sig.r = int_to_bytes32_be(r)
