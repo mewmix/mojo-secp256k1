@@ -28,3 +28,6 @@ cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak test_sign_dump.mojo | .pixi
 
 [tasks.test-recover]
 cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak test_recover_dump.mojo | .pixi/envs/default/bin/python python_tests/recover_and_compare.py"'
+
+[tasks.benchmark-recover]
+cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak benchmark_recover.mojo | .pixi/envs/default/bin/python python_tests/benchmark_recover.py"'

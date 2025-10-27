@@ -341,17 +341,51 @@ fn pubkey_from_seckey(seckey32: List[Int]) raises -> Point:
         raise Error("invalid secret key (zero)")
     return point_mul(priv, generator_point())
 
-fn pubkey_serialize_uncompressed_xy(p: Point) raises -> List[Int]:
-    if p.infinity:
-        raise Error("cannot serialize point at infinity")
-    var out = [0] * 64
-    var xb = int_to_bytes32_be(p.x)
-    var yb = int_to_bytes32_be(p.y)
-    @parameter
-    for i in range(32):
-        out[i] = xb[i] & 0xFF
-        out[32 + i] = yb[i] & 0xFF
-    return out.copy()
+fn ecdsa_recover(msg32: List[Int], sig: SigCompact) raises -> Point:
+    if len(msg32) != 32:
+        raise Error("message must be 32 bytes")
+
+    var r = bytes_to_int_be(sig.r)
+    var s = bytes_to_int_be(sig.s)
+    var v = sig.v
+
+    if r >= CURVE_N or s >= CURVE_N or r.is_zero() or s.is_zero():
+        raise Error("invalid signature")
+
+    if v < 27 or v > 30:
+        raise Error("invalid recovery id")
+
+    var recid = v - 27
+
+    var x = r
+    var x_cubed_ax_b = mod_positive(x * x * x + B, FIELD_P)
+    var beta = mod_pow(x_cubed_ax_b, (FIELD_P + BigInt(1)) // BigInt(4), FIELD_P)
+
+    var y: BigInt
+    var beta_parity = Int(beta % BigInt(2))
+
+    if beta_parity == recid:
+        y = beta
+    else:
+        y = FIELD_P - beta
+
+    if mod_positive(y * y, FIELD_P) != x_cubed_ax_b:
+        raise Error("invalid signature, r is not a valid x coordinate")
+
+    var R = point_from_xy(x, y)
+    var z = bytes_to_int_be(msg32)
+    var r_inv = mod_inv(r, CURVE_N)
+
+    var sR = point_mul(s, R)
+    var G = generator_point()
+    var neg_zG = point_mul(CURVE_N - z, G)
+
+    var Q = point_mul(r_inv, point_add(sR, neg_zG))
+
+    if Q.infinity:
+        raise Error("invalid signature")
+
+    return Q
 
 
 fn bytes_to_int_be(data: List[Int]) -> BigInt:
