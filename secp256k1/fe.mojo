@@ -35,6 +35,18 @@ fn _mod_positive(value: BigInt, modulus: BigInt) raises -> BigInt:
     return r
 
 
+fn mod_pow(base: BigInt, exp: BigInt, modulus: BigInt) raises -> BigInt:
+    var res = BigInt(1)
+    var b = base
+    var e = exp
+    while e > BigInt(0):
+        if e % BigInt(2) == BigInt(1):
+            res = _mod_positive(res * b, modulus)
+        b = _mod_positive(b * b, modulus)
+        e = e // BigInt(2)
+    return res
+
+
 struct Fe(Movable):
     var value: BigInt
 
@@ -94,28 +106,10 @@ fn fe_inv(a: Fe) raises -> Fe:
     var val = _mod_positive(a.value, FIELD_P)
     if val.is_zero():
         raise Error("inverse does not exist for zero field element")
-
-    var t = BigInt(0)
-    var new_t = BigInt(1)
-    var r = FIELD_P
-    var new_r = val
-
-    while not new_r.is_zero():
-        var quotient = r // new_r
-        var temp_t = t - quotient * new_t
-        t = new_t
-        new_t = temp_t
-        var temp_r = r - quotient * new_r
-        r = new_r
-        new_r = temp_r
-
-    if r != BigInt(1):
-        raise Error("inverse does not exist")
-
-    if t < BigInt(0):
-        t = t + FIELD_P
-
-    return _fe_from_int(t)
+    
+    var exp = FIELD_P - BigInt(2)
+    var inv = mod_pow(val, exp, FIELD_P)
+    return _fe_from_int(inv)
 
 
 fn fe_normalize_strong(mut a: Fe) raises:

@@ -103,32 +103,26 @@ fn mod_positive(value: BigInt, modulus: BigInt) raises -> BigInt:
     return r
 
 
-fn mod_inv(value: BigInt, modulus: BigInt) raises -> BigInt:
-    var t = BigInt(0)
-    var new_t = BigInt(1)
-    var r = modulus
-    var new_r = mod_positive(value, modulus)
+fn mod_pow(base: BigInt, exp: BigInt, modulus: BigInt) raises -> BigInt:
+    var res = BigInt(1)
+    var b = base
+    var e = exp
+    while e > BigInt(0):
+        if e % BigInt(2) == BigInt(1):
+            res = mod_positive(res * b, modulus)
+        b = mod_positive(b * b, modulus)
+        e = e // BigInt(2)
+    return res
 
+
+fn mod_inv(value: BigInt, modulus: BigInt) raises -> BigInt:
     if modulus <= BigInt(0):
         raise Error("modulus must be positive")
-    if new_r.is_zero():
+    var val_mod = mod_positive(value, modulus)
+    if val_mod.is_zero():
         raise Error("inverse does not exist")
-
-    while not new_r.is_zero():
-        var quotient = r // new_r
-        var temp_t = t - quotient * new_t
-        t = new_t
-        new_t = temp_t
-        var temp_r = r - quotient * new_r
-        r = new_r
-        new_r = temp_r
-
-    if r != BigInt(1):
-        raise Error("inverse does not exist")
-
-    if t < BigInt(0):
-        t = t + modulus
-    return t
+    var exp = modulus - BigInt(2)
+    return mod_pow(val_mod, exp, modulus)
 
 
 struct Point(ImplicitlyCopyable, Movable):
@@ -141,6 +135,17 @@ struct Point(ImplicitlyCopyable, Movable):
         self.y = BigInt(0)
         self.infinity = True
 
+struct JacobianPoint(ImplicitlyCopyable, Movable):
+    var x: BigInt
+    var y: BigInt
+    var z: BigInt
+    var infinity: Bool
+
+    fn __init__(out self):
+        self.x = BigInt(0)
+        self.y = BigInt(0)
+        self.z = BigInt(0)
+        self.infinity = True
 
 struct SigCompact(Copyable, Movable):
     var r: List[Int]
@@ -152,6 +157,86 @@ struct SigCompact(Copyable, Movable):
         self.s = [0] * 32
         self.v = 0
 
+
+
+fn affine_to_jacobian(p: Point) -> JacobianPoint:
+    var res = JacobianPoint()
+    if p.infinity:
+        res.infinity = True
+    else:
+        res.x = p.x
+        res.y = p.y
+        res.z = BigInt(1)
+        res.infinity = False
+    return res
+
+fn jacobian_to_affine(p: JacobianPoint) raises -> Point:
+    if p.infinity:
+        return point_infinity()
+    
+    var z_inv = mod_inv(p.z, FIELD_P)
+    var z_inv_sq = mod_positive(z_inv * z_inv, FIELD_P)
+    var x = mod_positive(p.x * z_inv_sq, FIELD_P)
+    var y = mod_positive(p.y * z_inv_sq * z_inv, FIELD_P)
+    return point_from_xy(x, y)
+
+fn point_double_jacobian(p: JacobianPoint) raises -> JacobianPoint:
+    if p.infinity or p.y.is_zero():
+        var res = JacobianPoint()
+        res.infinity = True
+        return res
+
+    var y2 = mod_positive(p.y * p.y, FIELD_P)
+    var s = mod_positive(BigInt(4) * p.x * y2, FIELD_P)
+    var m = mod_positive(BigInt(3) * p.x * p.x, FIELD_P)
+    var x = mod_positive(m * m - BigInt(2) * s, FIELD_P)
+    var y = mod_positive(m * (s - x) - BigInt(8) * y2 * y2, FIELD_P)
+    var z = mod_positive(BigInt(2) * p.y * p.z, FIELD_P)
+    
+    var res = JacobianPoint()
+    res.x = x
+    res.y = y
+    res.z = z
+    res.infinity = False
+    return res
+
+fn point_add_jacobian(p1: JacobianPoint, p2: JacobianPoint) raises -> JacobianPoint:
+    if p1.infinity:
+        return p2
+    if p2.infinity:
+        return p1
+
+    var z1z1 = mod_positive(p1.z * p1.z, FIELD_P)
+    var z2z2 = mod_positive(p2.z * p2.z, FIELD_P)
+    var u1 = mod_positive(p1.x * z2z2, FIELD_P)
+    var u2 = mod_positive(p2.x * z1z1, FIELD_P)
+    var s1 = mod_positive(p1.y * z2z2 * p2.z, FIELD_P)
+    var s2 = mod_positive(p2.y * z1z1 * p1.z, FIELD_P)
+
+    if u1 == u2:
+        if s1 != s2:
+            var res = JacobianPoint()
+            res.infinity = True
+            return res
+        else:
+            return point_double_jacobian(p1)
+
+    var h = u2 - u1
+    var r = s2 - s1
+    var h2 = mod_positive(h * h, FIELD_P)
+    var h3 = mod_positive(h2 * h, FIELD_P)
+    var u1_h2 = mod_positive(u1 * h2, FIELD_P)
+    
+    var x = mod_positive(r * r - h3 - BigInt(2) * u1_h2, FIELD_P)
+    var y = mod_positive(r * (u1_h2 - x) - mod_positive(s1 * h3, FIELD_P), FIELD_P)
+    var z = mod_positive(h * p1.z * p2.z, FIELD_P)
+
+    var res = JacobianPoint()
+    res.x = x
+    res.y = y
+    res.z = z
+    res.infinity = False
+    return res
 
 fn point_infinity() -> Point:
     var p = Point()
@@ -165,6 +250,13 @@ fn point_from_xy(x: BigInt, y: BigInt) raises -> Point:
     p.x = mod_positive(x, FIELD_P)
     p.y = mod_positive(y, FIELD_P)
     return p^
+
+
+fn point_neg(p: Point) raises -> Point:
+    if p.infinity:
+        return p
+    return point_from_xy(p.x, -p.y)
+
 
 
 fn point_double(p: Point) raises -> Point:
@@ -202,16 +294,35 @@ fn point_add(a: Point, b: Point) raises -> Point:
 
 fn point_mul(k: BigInt, base: Point) raises -> Point:
     var scalar = mod_positive(k, CURVE_N)
-    var result = point_infinity()
-    var addend = base
+    
+    if base.infinity or scalar.is_zero():
+        return point_infinity()
 
-    while scalar > BigInt(0):
-        if scalar % BigInt(2) == BigInt(1):
-            result = point_add(result, addend)
-        addend = point_double(addend)
-        scalar = scalar // BigInt(2)
+    var base_j = affine_to_jacobian(base)
+    var result_j = JacobianPoint()
+    result_j.infinity = True
 
-    return result
+    var naf = List[Int]()
+    var k_naf = scalar
+    while k_naf > BigInt(0):
+        if k_naf % BigInt(2) == BigInt(1):
+            var z = 2 - Int(k_naf % BigInt(4))
+            naf.append(z)
+            k_naf = k_naf - BigInt(z)
+        else:
+            naf.append(0)
+        k_naf = k_naf // BigInt(2)
+
+    var neg_base_j = affine_to_jacobian(point_neg(base))
+
+    for i in range(len(naf) - 1, -1, -1):
+        result_j = point_double_jacobian(result_j)
+        if naf[i] == 1:
+            result_j = point_add_jacobian(result_j, base_j)
+        elif naf[i] == -1:
+            result_j = point_add_jacobian(result_j, neg_base_j)
+
+    return jacobian_to_affine(result_j)
 
 
 fn generator_point() -> Point:
