@@ -134,3 +134,32 @@ fn sha256_bytes(data: List[Int]) -> List[Int]:
         digest[out_index + 3] = Int(word & 0xFF)
         out_index += 4
     return digest.copy()
+
+
+fn sha256_hmac(key: List[Int], data: List[Int]) -> List[Int]:
+    """Compute HMAC-SHA256 using the pure Mojo SHA-256 implementation."""
+    var key_bytes = key.copy()
+
+    if len(key_bytes) > 64:
+        key_bytes = sha256_bytes(key_bytes)
+
+    while len(key_bytes) < 64:
+        key_bytes.append(0)
+
+    var o_key_pad = [0] * 64
+    var i_key_pad = [0] * 64
+    for i in range(64):
+        var byte = key_bytes[i] & 0xFF
+        i_key_pad[i] = (byte ^ 0x36) & 0xFF
+        o_key_pad[i] = (byte ^ 0x5C) & 0xFF
+
+    var inner = i_key_pad.copy()
+    for value in data:
+        inner.append(value & 0xFF)
+    var inner_hash = sha256_bytes(inner)
+
+    var outer = o_key_pad.copy()
+    for value in inner_hash:
+        outer.append(value & 0xFF)
+
+    return sha256_bytes(outer)
