@@ -2,7 +2,8 @@
 name = "mojo-secp256k1"
 version = "0.1.0"
 description = "Deterministic secp256k1 signing primitives in Mojo"
-channels = ["conda-forge"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+
 platforms = ["osx-arm64", "linux-64"]
 
 [dependencies]
