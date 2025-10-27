@@ -25,3 +25,6 @@ cmd = "mojo -I decimojo/src test_secp256k1_kat.mojo"
 
 [tasks.test-sigdump]
 cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak test_sign_dump.mojo | python python_tests/verify_eth_keys.py"'
+
+
+
