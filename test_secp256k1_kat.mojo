@@ -37,14 +37,15 @@ fn from_hex(hex_str: String) -> List[Int]:
     for i in range(0, len(hex_str), 2):
         var h = hex_str[i:i+2]
         var val = 0
-        for c in h:
+        for cp in h.codepoints():
             val = val * 16
-            if '0' <= c <= '9':
-                val += ord(c) - ord('0')
-            elif 'a' <= c <= 'f':
-                val += ord(c) - ord('a') + 10
-            elif 'A' <= c <= 'F':
-                val += ord(c) - ord('A') + 10
+            var code = Int(cp)
+            if code >= ord('0') and code <= ord('9'):
+                val += code - ord('0')
+            elif code >= ord('a') and code <= ord('f'):
+                val += code - ord('a') + 10
+            elif code >= ord('A') and code <= ord('F'):
+                val += code - ord('A') + 10
         bytes.append(val)
     return bytes.copy()
 

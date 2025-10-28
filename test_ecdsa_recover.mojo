@@ -45,7 +45,7 @@ fn test_case(seckey_hex: String, msg: List[Int]) raises:
 
     assert_eq_lists(rec_xy, pub_ref_xy, "recovered pubkey mismatch")
 
-fn main() raises:
+fn run_all_tests() raises -> String:
     var keys = [
         # 32-byte scalar = 0x...01 (64 hex digits)
         "0000000000000000000000000000000000000000000000000000000000000001",
@@ -65,4 +65,8 @@ fn main() raises:
             test_case(keys[i], msgs[j])
             j += 1
         i += 1
-    print("PASS: pure-Mojo recover matched pubkeys for all cases")
+    return "PASS: pure-Mojo recover matched pubkeys for all cases"
+
+fn main() raises:
+    var result = run_all_tests()
+    print(result)
