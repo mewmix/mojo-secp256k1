@@ -1,0 +1,6 @@
+[submodule "external/wycheproof"]
+	path = external/wycheproof
+	url = https://github.com/google/wycheproof.git
+[submodule "external/cryptography"]
+	path = external/cryptography
+	url = https://github.com/pyca/cryptography.git
