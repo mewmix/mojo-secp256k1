@@ -195,7 +195,7 @@ fn fe_mul(a: Fe, b: Fe) -> Fe:
             (s, carry) = add_carry(t[i+j+1], hi, c)
             t[i+j+1] = s
             j += 1
-        var k = i + 4
+        var k = i + 5
         while carry != UInt64(0):
             var s2: UInt64; var c2: UInt64
             (s2, c2) = add_carry(t[k], UInt64(0), carry)
