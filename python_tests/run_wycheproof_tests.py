@@ -40,7 +40,12 @@ def run_mojo_verifier_batch(batch):
     return stdout.decode().strip().split('\n')
 
 def main():
-    with open("external/wycheproof/testvectors_v1/ecdsa_secp256k1_sha256_test.json") as f:
+    # Determine the absolute path to the test vectors file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.abspath(os.path.join(script_dir, '..'))
+    file_path = os.path.join(repo_root, "external/wycheproof/testvectors_v1/ecdsa_secp256k1_sha256_test.json")
+
+    with open(file_path) as f:
         data = json.load(f)
 
     fails = 0
