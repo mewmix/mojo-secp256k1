@@ -17,7 +17,6 @@ def run_mojo_signer(keys_and_messages):
     # Use the full path to the python executable to avoid issues
     python_executable = ".pixi/envs/default/bin/python"
 
-<<<<<<< HEAD
     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
         writer = csv.writer(temp_file, delimiter='\t')
         writer.writerow(["sk_hex", "msg_hex"])
@@ -28,7 +27,6 @@ def run_mojo_signer(keys_and_messages):
     # Run the Mojo script
     mojo_cmd = (
         f"mojo -I . -I decimojo/src -I keccak "
-<<<<<<< HEAD
         f"tests/test_differential_sign.mojo {temp_file_path}"
     )
     process = subprocess.Popen(
