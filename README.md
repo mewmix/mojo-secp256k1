@@ -1,6 +1,7 @@
 # mojo-secp256k1
-Deterministic secp256k1 ECDSA signing in *Mojo*, heavily supported by BigInt arithmetic  from [DeciMojo](https://github.com/forfudan/decimojo) and an sporting a *pure Mojo* [Keccak-256](https://github.com/mewmix/keccak256_mojo) implementation. 
 [![CI](https://github.com/mewmix/mojo-secp256k1/actions/workflows/ci.yml/badge.svg)](https://github.com/mewmix/mojo-secp256k1/actions/workflows/ci.yml)
+
+Deterministic secp256k1 ECDSA signing in *Mojo*, heavily supported by BigInt arithmetic  from [DeciMojo](https://github.com/forfudan/decimojo) and an sporting a *pure Mojo* [Keccak-256](https://github.com/mewmix/keccak256_mojo) implementation. 
 ## Install Pixie
 
 ```bash
