@@ -4,6 +4,7 @@ from secp256k1.field_limb import (
     fe_add, fe_sub, fe_neg, fe_mul, fe_sqr, fe_inv,
     fe_from_limbs, fe_from_bytes32, fe_to_bytes32
 )
+from collections.inline_array import InlineArray
 
 fn assert_eq_bytes(a: List[Int], b: List[Int], msg: String) raises:
     if len(a) != len(b): raise Error(msg + " (len mismatch)")
@@ -38,6 +39,21 @@ fn expect_one(a: Fe, label: String) raises:
     var ob = fe_to_bytes32(fe_one())
     assert_eq_bytes(ab, ob, label + ": not one")
 
+ 
+# --- debug helpers that avoid printing List[Int] directly (not Writable) ---
+fn dbg_fe(label: String, a: Fe):
+    # Print the raw LE limbs for quick inspection
+    print(label, a.v[0], a.v[1], a.v[2], a.v[3])
+
+fn dbg_bytes(label: String, b: List[Int]):
+    # Print bytes as decimal values, one per line (simple & Writable)
+    print(label)
+    var i = 0
+    while i < len(b):
+        print(b[i])
+        i += 1
+
+
 fn main() raises:
     # p in BE
     var p_be = be_hex_bytes("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
@@ -46,7 +62,12 @@ fn main() raises:
     var p = fe_p()
     assert_eq_bytes(fe_to_bytes32(fe_clone(p)), p_be, "fe_p to_bytes32 mismatch")
     var p2 = fe_from_bytes32(p_be)
-    assert_eq_bytes(fe_to_bytes32(fe_clone(p2)), p_be, "from_bytes32(p) roundtrip")
+    # Inputs >= p must reduce; p mod p = 0.
+    assert_eq_bytes(
+        fe_to_bytes32(fe_clone(p2)),
+        fe_to_bytes32(fe_zero()),
+        "from_bytes32(p) should be zero"
+    )
 
     # a + 0 = a  and  a - 0 = a
     var a = fe_from_limbs(InlineArray[UInt64,4](123, 0, 0, 0))
@@ -55,8 +76,8 @@ fn main() raises:
     t = fe_sub(fe_clone(a), fe_zero())
     assert_eq_bytes(fe_to_bytes32(t), fe_to_bytes32(fe_clone(a)), "a - 0 != a")
 
-    # 1 + (p-1) == 0
-    var pm1 = fe_sub(fe_clone(p), fe_one())
+    # 1 + (p-1) == 0   (derive p-1 canonically as 0 - 1)
+    var pm1 = fe_sub(fe_zero(), fe_one())
     expect_zero(fe_add(fe_one(), fe_clone(pm1)), "1 + (p-1)")
 
     # 0 - 1 == p-1
@@ -64,7 +85,15 @@ fn main() raises:
 
     # (-1)^2 == 1
     var neg1 = fe_clone(pm1)
-    expect_one(fe_sqr(neg1), "(-1)^2")
+    var sq = fe_sqr(neg1)
+
+    # debug
+    dbg_fe("(-1) limbs:", neg1)
+    dbg_bytes("(-1) bytes:", fe_to_bytes32(neg1))
+    dbg_fe("(-1)^2 limbs:", sq)
+    dbg_bytes("(-1)^2 bytes:", fe_to_bytes32(sq))
+
+    expect_one(sq, "(-1)^2")
 
     # (p-1)*(p-1) == 1
     expect_one(fe_mul(fe_clone(pm1), fe_clone(pm1)), "(p-1)*(p-1)")
