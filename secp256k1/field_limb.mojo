@@ -175,12 +175,25 @@ fn fe_neg(a: Fe) -> Fe:
         return fe_clone(a)
     return fe_sub(fe_p(), a)
 
+@always_inline
+fn reduce_once(a: Fe) -> Fe:
+    # conditional subtract p
+    var borrow = UInt64(0)
+    var d0: UInt64; var d1: UInt64; var d2: UInt64; var d3: UInt64
+    (d0, borrow) = sub_borrow(a.v[0], P0, borrow)
+    (d1, borrow) = sub_borrow(a.v[1], P1, borrow)
+    (d2, borrow) = sub_borrow(a.v[2], P2, borrow)
+    (d3, borrow) = sub_borrow(a.v[3], P3, borrow)
+    if borrow == UInt64(0):
+        return fe_from_limbs(InlineArray[UInt64,4](d0,d1,d2,d3))
+    return fe_clone(a)
+
 # --- multiply and reduce mod p ---
 # Schoolbook 4x4=8 limbs then pseudo-Mersenne fold for p = 2^256 - 2^32 - 977:
 # N = L + (H<<32) + 977*H, where L=t0..t3, H=t4..t7 (256 bits each)
 fn fe_mul(a: Fe, b: Fe) -> Fe:
-    # 1) Schoolbook 4x4 => 8 limbs in t
-    var t = InlineArray[UInt64,8](0,0,0,0,0,0,0,0)
+    # 1) Schoolbook 4x4 => 8 limbs in t (allow t[8] for final carry)
+    var t = InlineArray[UInt64,9](0,0,0,0,0,0,0,0,0)
     var i = 0
     while i < 4:
         var carry = UInt64(0)
@@ -188,13 +201,21 @@ fn fe_mul(a: Fe, b: Fe) -> Fe:
         while j < 4:
             var lo: UInt64; var hi: UInt64
             (lo, hi) = mul64_128(a.v[i], b.v[j])
-            var s: UInt64; var c: UInt64
-            (s, c) = add_carry(t[i+j], lo, UInt64(0))
-            (s, c) = add_carry(s, carry, c)
+
+            # --- START FIXED BLOCK ---
+            var s: UInt64
+            var c1: UInt64
+            var c2: UInt64
+            (s, c1) = add_carry(t[i+j], lo, UInt64(0))
+            (s, c2) = add_carry(s, carry, UInt64(0))
             t[i+j] = s
+            var c = c1 + c2
             (s, carry) = add_carry(t[i+j+1], hi, c)
             t[i+j+1] = s
+            # --- END FIXED BLOCK ---
+
             j += 1
+        # any remaining carry goes past the last touched slot (i+4) -> start at i+5
         var k = i + 5
         while carry != UInt64(0):
             var s2: UInt64; var c2: UInt64
@@ -205,81 +226,115 @@ fn fe_mul(a: Fe, b: Fe) -> Fe:
         i += 1
 
     # Split: L=t0..t3, H=t4..t7
-    var r = InlineArray[UInt64,5](t[0], t[1], t[2], t[3], 0)  # r4 is overflow sink
+    # r has an extra overflow limb r[5] to avoid dropping carry
+    var r = InlineArray[UInt64,6](t[0], t[1], t[2], t[3], 0, 0)
     var h0 = t[4]; var h1 = t[5]; var h2 = t[6]; var h3 = t[7]
 
-    # 2) Add (H << 32) into r0..r3; stuff beyond 256 bits goes into r4
+    # 2) Add (H << 32) into r0..r3; any overflow -> r[4], then r[5]
     var sh0 = (h0 << UInt64(32))
     var sh1 = (h1 << UInt64(32)) | (h0 >> UInt64(32))
     var sh2 = (h2 << UInt64(32)) | (h1 >> UInt64(32))
     var sh3 = (h3 << UInt64(32)) | (h2 >> UInt64(32))
+
     var c0 = UInt64(0)
     (r[0], c0) = add_carry(r[0], sh0, c0)
     (r[1], c0) = add_carry(r[1], sh1, c0)
     (r[2], c0) = add_carry(r[2], sh2, c0)
     (r[3], c0) = add_carry(r[3], sh3, c0)
-    # true overflow from the shift is (h3 >> 32) + c0
-    var overflow = (h3 >> UInt64(32)) + c0
-    r[4] = overflow
 
-    # 3) Add 977*H into r with full carry to r4
+    # true overflow from the shift goes into r[4], and any spill into r[5]
+    var overflow = (h3 >> UInt64(32)) + c0
+    var spill: UInt64
+    (r[4], spill) = add_carry(r[4], overflow, UInt64(0))
+    if spill != UInt64(0):
+        (r[5], _) = add_carry(r[5], spill, UInt64(0))
+
+    # 3) Add 977*H into r with full carry propagation to r[5]
     var K = UInt64(0x3D1)
     var lo_: UInt64; var hi_: UInt64
 
-    # i=0 -> add to r0,r1 and propagate to r2..r4
+    # i=0 -> add to r0,r1 then propagate across r2..r5
     (lo_, hi_) = mul64_128(h0, K)
     c0 = UInt64(0)
     (r[0], c0) = add_carry(r[0], lo_, c0)
     (r[1], c0) = add_carry(r[1], hi_, c0)
-    (r[2], c0) = add_carry(r[2], UInt64(0), c0)
-    (r[3], c0) = add_carry(r[3], UInt64(0), c0)
-    (r[4], c0) = add_carry(r[4], UInt64(0), c0)
+    var pos = 2
+    while pos <= 5:
+        (r[pos], c0) = add_carry(r[pos], UInt64(0), c0)
+        pos += 1
 
     # i=1 -> add to r1,r2 ...
     (lo_, hi_) = mul64_128(h1, K)
     c0 = UInt64(0)
     (r[1], c0) = add_carry(r[1], lo_, c0)
     (r[2], c0) = add_carry(r[2], hi_, c0)
-    (r[3], c0) = add_carry(r[3], UInt64(0), c0)
-    (r[4], c0) = add_carry(r[4], UInt64(0), c0)
+    pos = 3
+    while pos <= 5:
+        (r[pos], c0) = add_carry(r[pos], UInt64(0), c0)
+        pos += 1
 
     # i=2 -> add to r2,r3 ...
     (lo_, hi_) = mul64_128(h2, K)
     c0 = UInt64(0)
     (r[2], c0) = add_carry(r[2], lo_, c0)
     (r[3], c0) = add_carry(r[3], hi_, c0)
-    (r[4], c0) = add_carry(r[4], UInt64(0), c0)
+    pos = 4
+    while pos <= 5:
+        (r[pos], c0) = add_carry(r[pos], UInt64(0), c0)
+        pos += 1
 
-    # i=3 -> add to r3, carry to r4
+    # i=3 -> add to r3,r4 ...
     (lo_, hi_) = mul64_128(h3, K)
     c0 = UInt64(0)
     (r[3], c0) = add_carry(r[3], lo_, c0)
     (r[4], c0) = add_carry(r[4], hi_, c0)
+    (r[5], _)  = add_carry(r[5], UInt64(0), c0)
 
-    # 4) Fold r4 repeatedly: r += (r4<<32) + 977*r4; update r4; stop when zero
+    # 4a) Fold r[5] while non-zero using: 2^320 ≡ 2^96 + 977·2^64 (mod p)
+    while r[5] != UInt64(0):
+        var ov5 = r[5]
+        r[5] = UInt64(0)
+
+        # add (ov5 << 96): i.e., (ov5 << 32) into r[1], then (ov5 >> 32) into r[2], carry onward
+        var cx = UInt64(0)
+        (r[1], cx) = add_carry(r[1], (ov5 << UInt64(32)), cx)
+        (r[2], cx) = add_carry(r[2], (ov5 >> UInt64(32)), cx)
+        (r[3], cx) = add_carry(r[3], UInt64(0), cx)
+        (r[4], cx) = add_carry(r[4], UInt64(0), cx)
+        (r[5], _)  = add_carry(r[5], UInt64(0), cx)  # push any spill back into r[5]
+
+        # add 977 * (ov5 << 64)
+        var lox: UInt64; var hix: UInt64
+        (lox, hix) = mul64_128(ov5, K)
+        var cy = UInt64(0)
+        (r[1], cy) = add_carry(r[1], lox, cy)
+        (r[2], cy) = add_carry(r[2], hix, cy)
+        (r[3], cy) = add_carry(r[3], UInt64(0), cy)
+        (r[4], cy) = add_carry(r[4], UInt64(0), cy)
+        (r[5], _)  = add_carry(r[5], UInt64(0), cy)
+
+    # 4b) Fold r[4] while non-zero using: 2^256 ≡ 2^32 + 977
     while r[4] != UInt64(0):
         var ov = r[4]
         r[4] = UInt64(0)
 
-        # add (ov << 32)  ==  low: (ov << 32) into r0,  high: (ov >> 32) into r1
-        var cx = UInt64(0)
-        (r[0], cx) = add_carry(r[0], (ov << UInt64(32)), cx)
-        (r[1], cx) = add_carry(r[1], (ov >> UInt64(32)), cx)       
-        (r[2], cx) = add_carry(r[2], UInt64(0), cx)
-        (r[3], cx) = add_carry(r[3], UInt64(0), cx)
-        (r[4], cx) = add_carry(r[4], UInt64(0), cx)  # any spill goes back to r4
+        var cx2 = UInt64(0)
+        (r[0], cx2) = add_carry(r[0], (ov << UInt64(32)), cx2)
+        (r[1], cx2) = add_carry(r[1], (ov >> UInt64(32)), cx2)
+        (r[2], cx2) = add_carry(r[2], UInt64(0), cx2)
+        (r[3], cx2) = add_carry(r[3], UInt64(0), cx2)
+        (r[4], _)   = add_carry(r[4], UInt64(0), cx2)
 
-        # add 977*ov
-        var lox: UInt64; var hix: UInt64
-        var cy = UInt64(0)
-        (lox, hix) = mul64_128(ov, K)
-        (r[0], cy) = add_carry(r[0], lox, cy)
-        (r[1], cy) = add_carry(r[1], hix, cy)
-        (r[2], cy) = add_carry(r[2], UInt64(0), cy)
-        (r[3], cy) = add_carry(r[3], UInt64(0), cy)
-        (r[4], cy) = add_carry(r[4], UInt64(0), cy)
+        var lox2: UInt64; var hix2: UInt64
+        var cy2 = UInt64(0)
+        (lox2, hix2) = mul64_128(ov, K)
+        (r[0], cy2) = add_carry(r[0], lox2, cy2)
+        (r[1], cy2) = add_carry(r[1], hix2, cy2)
+        (r[2], cy2) = add_carry(r[2], UInt64(0), cy2)
+        (r[3], cy2) = add_carry(r[3], UInt64(0), cy2)
+        (r[4], _)   = add_carry(r[4], UInt64(0), cy2)
 
-    # 5) Canonicalize using borrow-driven loop: keep subtracting p while no borrow
+    # 5) Canonicalize via borrow-driven loop
     var out = fe_from_limbs(InlineArray[UInt64,4](r[0], r[1], r[2], r[3]))
     while True:
         var b = UInt64(0)
@@ -290,9 +345,10 @@ fn fe_mul(a: Fe, b: Fe) -> Fe:
         (q3, b) = sub_borrow(out.v[3], P3, b)
         if b == UInt64(0):
             out = fe_from_limbs(InlineArray[UInt64,4](q0, q1, q2, q3))
-            continue
-        break
+        else:
+            break
     return out^
+
 @always_inline
 fn fe_sqr(a: Fe) -> Fe:
     return fe_mul(a, a)
