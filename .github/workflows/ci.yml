@@ -44,7 +44,7 @@ jobs:
 
       - name: Install (macOS)
         if: runner.os == 'macOS'
-        run: pixi install --locked
+        run: pixi install 
 
       - name: Mojo version
         run: pixi run mojo --version
