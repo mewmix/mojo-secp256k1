@@ -167,7 +167,7 @@ fn fe_sub(a: Fe, b: Fe) -> Fe:
         (r[0], c) = add_carry(r[0], P0, c)
         (r[1], c) = add_carry(r[1], P1, c)
         (r[2], c) = add_carry(r[2], P2, c)
-        (r[3], c) = add_carry(r[3], P3, c)
+        (r[3], _) = add_carry(r[3], P3, c)
     return fe_from_limbs(r)
 
 @always_inline
@@ -233,7 +233,7 @@ fn fe_mul(a: Fe, b: Fe) -> Fe:
     (r[0], carry1) = add_carry(r[0], sh0, carry1)
     (r[1], carry1) = add_carry(r[1], sh1, carry1)
     (r[2], carry1) = add_carry(r[2], sh2, carry1)
-    (r[3], carry1) = add_carry(r[3], sh3, carry1)
+    (r[3], _) = add_carry(r[3], sh3, carry1)
 
     # add r += 977*H (977 = 0x3D1)
     var k0 = UInt64(0x3D1)
@@ -253,19 +253,25 @@ fn fe_mul(a: Fe, b: Fe) -> Fe:
     if carry2 != UInt64(0):
         # r += (carry2 << 32)
         var s0 = (carry2 << UInt64(32))
-        var c3 = UInt64(0)
-        (r[0], c3) = add_carry(r[0], s0, UInt64(0))
-        (r[1], c3) = add_carry(r[1], UInt64(0), c3)
-        (r[2], c3) = add_carry(r[2], UInt64(0), c3)
-        (r[3], c3) = add_carry(r[3], UInt64(0), c3)
+        var _c3 = UInt64(0)
+        (_r0, _c3) = add_carry(r[0], s0, UInt64(0))
+        r[0] = _r0
+        (_r1, _c3) = add_carry(r[1], UInt64(0), _c3)
+        r[1] = _r1
+        (_r2, _c3) = add_carry(r[2], UInt64(0), _c3)
+        r[2] = _r2
+        (r[3], _) = add_carry(r[3], UInt64(0), _c3)
         # r += 977*carry2
         var lo2: UInt64; var hi2: UInt64
         (lo2, hi2) = mul64_128(carry2, k0)
-        var c4 = UInt64(0)
-        (r[0], c4) = add_carry(r[0], lo2, UInt64(0))
-        (r[1], c4) = add_carry(r[1], hi2, c4)
-        (r[2], c4) = add_carry(r[2], UInt64(0), c4)
-        (r[3], c4) = add_carry(r[3], UInt64(0), c4)
+        var _c4 = UInt64(0)
+        (_r0, _c4) = add_carry(r[0], lo2, UInt64(0))
+        r[0] = _r0
+        (_r1, _c4) = add_carry(r[1], hi2, _c4)
+        r[1] = _r1
+        (_r2, _c4) = add_carry(r[2], UInt64(0), _c4)
+        r[2] = _r2
+        (r[3], _) = add_carry(r[3], UInt64(0), _c4)
 
     # Final conditional subtract p (once or twice max)
     var out = fe_from_limbs(r)
