@@ -10,11 +10,13 @@ platforms = ["osx-arm64", "linux-64"]
 python = "*"
 pip = "*"
 mojo = "*"
+coincurve = "*"
 
 [pypi-dependencies]
 eth-keys = "*"
 eth-hash = {version = "*", extras = ["pycryptodome"]}
 pycryptodome = "*"
+ecdsa = "*"
 
 # Main test tasks that run everything
 [tasks.test]
@@ -49,3 +51,12 @@ cmd = ".pixi/envs/default/bin/python python_tests/kat_and_benchmark.py"
 
 [tasks.verify-all]
 cmd = ".pixi/envs/default/bin/python python_tests/verify_signatures.py"
+
+[tasks.test-differential]
+cmd = ".pixi/envs/default/bin/python python_tests/run_differential_test.py"
+
+[tasks.test-wycheproof]
+cmd = ".pixi/envs/default/bin/python python_tests/run_wycheproof_tests.py"
+
+[tasks.test-field-ops]
+cmd = "mojo -I . -I decimojo/src test_field_ops.mojo"

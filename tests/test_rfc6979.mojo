@@ -31,25 +31,39 @@ fn assert_eq32(a: List[Int], b: List[Int], msg: String) raises:
             raise Error(msg + " @ " + String(i))
 
 
-fn test_sample() raises:
-    var sk = from_hex32("C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721")
-    var h = sha256_bytes([115, 97, 109, 112, 108, 101])
-    var nonce = rfc6979_sha256(h, sk)
-    var k = nonce.next()
-    var expected = from_hex32("A6E3C57DD01ABE90086538398355DD4C3B17AA873382B0F24D6129493D8AAD60")
-    assert_eq32(k, expected, "k (sample)")
-
-
-fn test_test() raises:
-    var sk = from_hex32("C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721")
-    var h = sha256_bytes([116, 101, 115, 116])
-    var nonce = rfc6979_sha256(h, sk)
-    var k = nonce.next()
-    var expected = from_hex32("D16B6AE827F17175E040871A1C7EC3500192C4C92677336EC2537ACAEE0008E0")
-    assert_eq32(k, expected, "k (test)")
-
+from python import Python
 
 fn main() raises:
-    test_sample()
-    test_test()
+    var json = Python.import_module("json")
+    var f = Python.import_module("builtins").open("tests/rfc6979_p256.json")
+    var tests = json.load(f)
+
+    for test in tests:
+        var sk_b64 = test['key']
+        var msg_str = test['input']
+        var expected_hex = test['output']
+
+        # This is a bit of a hack to decode the base64 private key,
+        # but it's the easiest way to do it for now.
+        var base64 = Python.import_module("base64")
+        var binascii = Python.import_module("binascii")
+        var sk_der = base64.b64decode(sk_b64)
+
+        # The private key is in DER format, so we need to extract the raw key.
+        # This is another hack, but it works for these test vectors.
+        var sk = List[Int]()
+        for i in range(32):
+            sk.append(Int(sk_der[36 + i]))
+
+        var msg = List[Int]()
+        for c in msg_str.codepoints():
+            msg.append(Int(c))
+
+        var h = sha256_bytes(msg)
+        var nonce = rfc6979_sha256(h, sk)
+        var k = nonce.next()
+
+        var expected = from_hex32(String(expected_hex))
+        assert_eq32(k, expected, "k")
+
     print("Pass")
