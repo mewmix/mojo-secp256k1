@@ -13,7 +13,7 @@ def parse_rfc6979_vectors(filepath):
     test_cases = []
 
     # Extract private key
-<<<<<<< HEAD
+
     priv_key_match = re.search(r"-----BEGIN PRIVATE KEY-----\s*(.*?)\s*-----END PRIVATE KEY-----", p256_section.group(1), re.DOTALL)
     priv_key = priv_key_match.group(1).strip().replace("\n", "")
 

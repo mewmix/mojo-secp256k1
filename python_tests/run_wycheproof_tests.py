@@ -13,7 +13,7 @@ def run_mojo_verifier_batch(batch):
     """
     Runs the Mojo verification script for a batch of tests and returns the output.
     """
-<<<<<<< HEAD
+
     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
         writer = csv.writer(temp_file, delimiter='\t')
         for pub_key, msg, r, s in batch:
