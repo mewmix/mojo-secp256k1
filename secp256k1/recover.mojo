@@ -53,6 +53,7 @@ fn check_on_curve(p: Point) raises:
 fn ecdsa_recover_keccak(
     msg32: List[Int], r_bytes: List[Int], s_bytes: List[Int], v: Int
 ) raises -> Point:
+
     if len(msg32) != 32 or len(r_bytes) != 32 or len(s_bytes) != 32:
         raise Error("lengths must be 32")
 
@@ -60,8 +61,29 @@ fn ecdsa_recover_keccak(
     var r = mod_positive(bytes_to_int_be(r_bytes), CURVE_N)
     var s = mod_positive(bytes_to_int_be(s_bytes), CURVE_N)
 
-    if r.is_zero() or s.is_zero():
-        raise Error("invalid signature scalars")
+    # Check v is valid (Ethereum: 27 or 28)
+    if v != 27 and v != 28:
+        raise Error("invalid recovery id v")
+
+    # Check r, s in [1, n-1]
+    if r.is_zero() or r >= CURVE_N:
+        raise Error("invalid signature scalar r")
+    if s.is_zero() or s >= CURVE_N:
+        raise Error("invalid signature scalar s")
+
+    # Enforce low-s (non-canonical signatures)
+    var HALF_CURVE_N = CURVE_N // BigInt(2)
+    if s > HALF_CURVE_N:
+        raise Error("non-canonical signature: s > n/2")
+
+    # Optionally: reject all-zeros message (policy, not ECDSA spec)
+    var all_zeros = True
+    for b in msg32:
+        if b != 0:
+            all_zeros = False
+            break
+    if all_zeros:
+        raise Error("message is all zeros (adversarial)")
 
     # 1) Recover R from (r,v)
     var R = decompress_point_from_rx(r, v)
