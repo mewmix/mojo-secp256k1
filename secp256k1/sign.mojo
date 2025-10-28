@@ -280,9 +280,9 @@ fn point_add(a: Point, b: Point) raises -> Point:
     if b.infinity:
         return a
 
-    if a.x == b.x:
-        if mod_positive(a.y + b.y, FIELD_P).is_zero():
-            return point_infinity()
+    if a.x == b.x and a.y != b.y:
+        return point_infinity()
+    if a.x == b.x and a.y == b.y:
         return point_double(a)
 
     var numerator = mod_positive(b.y - a.y, FIELD_P)

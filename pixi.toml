@@ -10,11 +10,13 @@ platforms = ["osx-arm64", "linux-64"]
 python = "*"
 pip = "*"
 mojo = "*"
+coincurve = "*"
 
 [pypi-dependencies]
 eth-keys = "*"
 eth-hash = {version = "*", extras = ["pycryptodome"]}
 pycryptodome = "*"
+ecdsa = "*"
 
 # Main test tasks that run everything
 [tasks.test]
@@ -25,23 +27,23 @@ cmd = ".pixi/envs/default/bin/python python_tests/run_all.py"
 
 # Individual component tests for development
 [tasks.test-core]
-cmd = "mojo -I decimojo/src -I keccak test_secp256k1.mojo"
+cmd = "mojo -I decimojo/src -I keccak tests/test_secp256k1.mojo"
 
 [tasks.test-kat]
-cmd = "mojo -I decimojo/src test_secp256k1_kat.mojo"
+cmd = "mojo -I decimojo/src tests/test_secp256k1_kat.mojo"
 
 [tasks.test-rfc6979]
-cmd = "mojo -I . -I decimojo/src -I keccak test_seckp256k1_rfc6979.mojo"
+cmd = "mojo -I . -I decimojo/src -I keccak tests/test_seckp256k1_rfc6979.mojo"
 
 [tasks.test-recover]
-cmd = "mojo -I . -I decimojo/src -I keccak test_ecdsa_recover.mojo"
+cmd = "mojo -I . -I decimojo/src -I keccak tests/test_ecdsa_recover.mojo"
 
 # Cross-verification with eth-keys
 [tasks.verify-signatures]
-cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak test_sign_dump.mojo | .pixi/envs/default/bin/python python_tests/verify_eth_keys.py"'
+cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak tests/test_sign_dump.mojo | .pixi/envs/default/bin/python python_tests/verify_eth_keys.py"'
 
 [tasks.verify-recover]
-cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak test_recover_dump.mojo | .pixi/envs/default/bin/python python_tests/recover_and_compare.py"'
+cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak tests/test_recover_dump.mojo | .pixi/envs/default/bin/python python_tests/recover_and_compare.py"'
 
 # Additional tests and benchmarks
 [tasks.run-kat]
@@ -49,3 +51,18 @@ cmd = ".pixi/envs/default/bin/python python_tests/kat_and_benchmark.py"
 
 [tasks.verify-all]
 cmd = ".pixi/envs/default/bin/python python_tests/verify_signatures.py"
+
+[tasks.test-differential]
+cmd = ".pixi/envs/default/bin/python python_tests/run_differential_test.py"
+
+[tasks.test-wycheproof]
+cmd = ".pixi/envs/default/bin/python python_tests/run_wycheproof_tests.py"
+
+[tasks.test-field-ops]
+cmd = "mojo -I . -I decimojo/src tests/test_field_ops.mojo"
+
+[tasks.test-edge-cases]
+cmd = "mojo -I . -I decimojo/src tests/test_edge_cases.mojo"
+
+[tasks.fuzz]
+cmd = "mojo -I . -I decimojo/src fuzz_all.mojo"

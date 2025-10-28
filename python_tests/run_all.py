@@ -5,24 +5,28 @@ MOJO_I = "-I . -I decimojo/src -I keccak"
 
 # Core Mojo tests
 MOJO_TESTS = [
-    "test_secp256k1.mojo",          # Core scalar/point operations
-    "test_secp256k1_kat.mojo",      # Known-answer tests
-    "test_seckp256k1_rfc6979.mojo", # RFC6979 deterministic k generation
-    "test_ecdsa_recover.mojo"       # Public key recovery
+    "tests/test_secp256k1.mojo",
+    "tests/test_secp256k1_kat.mojo",
+    "tests/test_seckp256k1_rfc6979.mojo",
+    "tests/test_ecdsa_recover.mojo",
+    "tests/test_field_ops.mojo",
+    "tests/test_edge_cases.mojo",
 ]
 
 # Cross-verification with Python/eth-keys
 VERIFY_TESTS = [
     # Generate signatures and verify with eth-keys
-    ("test_sign_dump.mojo", "python_tests/verify_eth_keys.py"),
+    ("tests/test_sign_dump.mojo", "python_tests/verify_eth_keys.py"),
     # Generate recoverable signatures and verify recovery
-    ("test_recover_dump.mojo", "python_tests/recover_and_compare.py"),
+    ("tests/test_recover_dump.mojo", "python_tests/recover_and_compare.py"),
 ]
 
 # Known-answer tests and benchmarks
 EXTRA_TESTS = [
     "python_tests/kat_and_benchmark.py",
     "python_tests/verify_signatures.py",
+    "python_tests/run_differential_test.py",
+    "python_tests/run_wycheproof_tests.py",
 ]
 
 CMDS = (
