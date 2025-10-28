@@ -60,3 +60,9 @@ cmd = ".pixi/envs/default/bin/python python_tests/run_wycheproof_tests.py"
 
 [tasks.test-field-ops]
 cmd = "mojo -I . -I decimojo/src test_field_ops.mojo"
+
+[tasks.test-edge-cases]
+cmd = "mojo -I . -I decimojo/src test_edge_cases.mojo"
+
+[tasks.fuzz]
+cmd = "mojo -I . -I decimojo/src fuzz_all.mojo"
