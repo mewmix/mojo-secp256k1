@@ -25,11 +25,10 @@ fn fe_clone(a: Fe) -> Fe:
 
 # --- Prime p in 4x64 LE limbs ---
 # p = FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
-alias P0 = UInt64(0xFFFFFC2F)
-alias P1 = UInt64(0xFFFFFFFE)
+alias P0 = UInt64(0xFFFFFFFEFFFFFC2F)
+alias P1 = UInt64(0xFFFFFFFFFFFFFFFF)
 alias P2 = UInt64(0xFFFFFFFFFFFFFFFF)
 alias P3 = UInt64(0xFFFFFFFFFFFFFFFF)
-
 @always_inline
 fn fe_zero() -> Fe:
     return fe_from_limbs(InlineArray[UInt64,4](0,0,0,0))
@@ -47,7 +46,7 @@ fn fe_from_bytes32(b: List[Int]) -> Fe:
         var limb: UInt64 = 0
         var j = 0
         while j < 8:
-            var idx = 31 - (k*8 + j)
+            var idx = ((3 - k) * 8) + j
             var byte = UInt64(b[idx] & 0xFF)
             limb = (limb << UInt64(8)) | byte
             j += 1
