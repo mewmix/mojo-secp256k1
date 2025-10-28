@@ -13,11 +13,12 @@ def parse_rfc6979_vectors(filepath):
     test_cases = []
 
     # Extract private key
-    priv_key_match = re.search(r"-----BEGIN PRIVATE KEY-----(.+?)-----END PRIVATE KEY-----", p256_section.group(1), re.DOTALL)
-    priv_key = priv_key_match.group(1).strip().replace("\\n", "")
+<<<<<<< HEAD
+    priv_key_match = re.search(r"-----BEGIN PRIVATE KEY-----\s*(.*?)\s*-----END PRIVATE KEY-----", p256_section.group(1), re.DOTALL)
+    priv_key = priv_key_match.group(1).strip().replace("\n", "")
 
     # Extract test cases
-    for match in re.finditer(r"DigestSign = (.*?)\\nKey = (.*?)\\nNonceType = (.*?)\\nInput = \"(.*?)\"\\nOutput = (.*?)\\n", p256_section.group(1)):
+    for match in re.finditer(r"DigestSign = (.*?)\nKey = (.*?)\nNonceType = (.*?)\nInput = \"(.*?)\"\nOutput = (.*?)\n", p256_section.group(1)):
         test_cases.append({
             "digest": match.group(1),
             "key": priv_key,

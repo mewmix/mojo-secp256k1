@@ -5,6 +5,7 @@ import sys
 import subprocess
 import binascii
 import csv
+import tempfile
 from ecdsa import SECP256k1
 from ecdsa.util import sigdecode_der
 
@@ -12,14 +13,16 @@ def run_mojo_verifier_batch(batch):
     """
     Runs the Mojo verification script for a batch of tests and returns the output.
     """
-    with open("/tmp/wycheproof_batch.csv", "w") as f:
-        writer = csv.writer(f, delimiter='\t')
+<<<<<<< HEAD
+    with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
+        writer = csv.writer(temp_file, delimiter='\t')
         for pub_key, msg, r, s in batch:
             writer.writerow([pub_key.hex(), msg.hex(), hex(r)[2:], hex(s)[2:]])
+        temp_file_path = temp_file.name
 
     mojo_cmd = (
         f"mojo -I . -I decimojo/src -I keccak "
-        f"test_wycheproof_verify.mojo /tmp/wycheproof_batch.csv"
+        f"tests/test_wycheproof_verify.mojo {temp_file_path}"
     )
     process = subprocess.Popen(
         mojo_cmd,

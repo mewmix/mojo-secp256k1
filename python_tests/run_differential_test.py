@@ -5,6 +5,7 @@ import csv
 import io
 import subprocess
 import binascii
+import tempfile
 from coincurve.keys import PrivateKey, PublicKey
 from eth_hash.auto import keccak
 from ecdsa.util import sigencode_der
@@ -16,17 +17,19 @@ def run_mojo_signer(keys_and_messages):
     # Use the full path to the python executable to avoid issues
     python_executable = ".pixi/envs/default/bin/python"
 
-    # Write the keys and messages to a temporary file
-    with open("/tmp/differential_test_data.csv", "w") as f:
-        writer = csv.writer(f, delimiter='\t')
+<<<<<<< HEAD
+    with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
+        writer = csv.writer(temp_file, delimiter='\t')
         writer.writerow(["sk_hex", "msg_hex"])
         for sk, msg in keys_and_messages:
             writer.writerow([sk.hex(), msg.hex()])
+        temp_file_path = temp_file.name
 
     # Run the Mojo script
     mojo_cmd = (
         f"mojo -I . -I decimojo/src -I keccak "
-        f"test_differential_sign.mojo /tmp/differential_test_data.csv"
+<<<<<<< HEAD
+        f"tests/test_differential_sign.mojo {temp_file_path}"
     )
     process = subprocess.Popen(
         mojo_cmd,

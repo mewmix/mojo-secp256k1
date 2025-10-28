@@ -119,7 +119,36 @@ fn fuzz_point_ops(iterations: Int = 10000, seed: UInt64 = UInt64(0xABCDEF1234567
 
     print("[fuzz_point_ops] COMPLETED")
 
+from secp256k1.recover import ecdsa_recover_keccak
+from secp256k1.sign import SigCompact
+
+fn prng_byte(tag: Int, iter_idx: Int, seed: UInt64) -> Int:
+    var b = prng32(tag, iter_idx, seed)
+    return b[0]  # 0..255
+
+fn fuzz_ecdsa_recover(iterations: Int = 10000, seed: UInt64 = UInt64(0xABCDEF1234567890)):
+    print("[fuzz_ecdsa_recover] START")
+    var i = 0
+    while i < iterations:
+        var msg = prng32(0xA1, i, seed)
+        var sig = SigCompact()
+        sig.r = prng32(0xB2, i, seed)
+        sig.s = prng32(0xC3, i, seed)
+        sig.v = prng_byte(0xD4, i, seed)  # 0..255
+
+        fn _consume_point(p: Point): pass
+        try:
+            _consume_point(ecdsa_recover_keccak(msg, sig.r, sig.s, sig.v))
+        except:
+            pass
+
+        if i % 1000 == 0:
+            print("[fuzz_ecdsa_recover] Iteration", i)
+        i += 1
+
+    print("[fuzz_ecdsa_recover] COMPLETED")
 fn main():
     fuzz_ecdsa_sign(10000)
     fuzz_ecdsa_verify(10000)
     fuzz_point_ops(10000)
+    fuzz_ecdsa_recover(10000)
