@@ -145,7 +145,7 @@ fn fe_add(a: Fe, b: Fe) -> Fe:
         (d[i], borrow) = sub_borrow(out.v[i], p_limbs[i], borrow)
     # clamp multi-bit carry to boolean for masking
     var p_or_c = UInt64(fe_ge(out, fe_p())) | UInt64(c != 0)
-    var mask = UInt64(0) - p_or_c
+    var mask = UInt64(0) - UInt64(p_or_c != 0)
     return fe_select(mask, fe_from_limbs(d), out)
 
 @always_inline
@@ -207,7 +207,7 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     (lo, hi) = mul64_128(h1, 977); (l1, c) = add_carry(l1, lo, c);   (l2, c) = add_carry(l2, hi, c)
     (lo, hi) = mul64_128(h2, 977); (l2, c) = add_carry(l2, lo, c);   (l3, c) = add_carry(l3, hi, c)
     (lo, hi) = mul64_128(h3, 977); (l3, c) = add_carry(l3, lo, c);   (l4, c) = add_carry(l4, hi, c)
-    var carry_after_977 = c                    # 0 or 1
+    var carry_after_977 = c                    # 0..2
 
     # ---- fold (H << 32) into (l0..l4), SEQUENTIALLY to preserve carries
     c = 0
@@ -219,7 +219,12 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     (l3, c) = add_carry(l3, (h2 >> 32), c)
     (l3, c) = add_carry(l3, (h3 << 32), c)
     (l4, c) = add_carry(l4, (h3 >> 32), c)   # the <<32 spill goes into l4
-    var extra_count: UInt64 = carry_after_977 + c   # 0,1,or 2
+    var extra_count: UInt64 = carry_after_977 + c   # 0..4 (be general)
+    if DEBUG_FE:
+        print("H:", h0, h1, h2, h3)
+        print("post 977*H:    l0..l4,c=", l0, l1, l2, l3, l4, carry_after_977)
+        print("post <<32:     l0..l4,c=", l0, l1, l2, l3, l4, c)
+        print("fold seeds:    l4=", l4, " extra_count=", extra_count)
 
     # ---- while we still have a 5th limb, fold it once more
     # In practice this loop runs 0 or 1 times.
@@ -243,12 +248,16 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
         (l2, cv) = add_carry(l2, 0, cv)
         (l3, cv) = add_carry(l3, 0, cv)
         (l4, _)  = add_carry(l4, 0, cv)            # new 5th limb if any
+        if DEBUG_FE:
+            print("fold step:   top=", top, " -> l0..l4=", l0, l1, l2, l3, l4, " extra_count=", extra_count)
 
     var out = fe_from_limbs(InlineArray[UInt64,4](l0, l1, l2, l3))
 
     # Canonicalize: at most 2 subtractions are ever needed
     out = reduce_once(out)
     out = reduce_once(out)
+    if DEBUG_FE:
+        print("out limbs:", out.v[0], out.v[1], out.v[2], out.v[3])
     return out^
 
 @always_inline

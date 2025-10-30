@@ -35,8 +35,7 @@ fn probe_pm1_square_prereduce() raises:
     (lo, hi) = mul64_128(h1, 977); (l1, c) = add_carry(l1, lo, c); (l2, c) = add_carry(l2, hi, c)
     (lo, hi) = mul64_128(h2, 977); (l2, c) = add_carry(l2, lo, c); (l3, c) = add_carry(l3, hi, c)
     (lo, hi) = mul64_128(h3, 977); (l3, c) = add_carry(l3, lo, c); (l4, c) = add_carry(l4, hi, c)
-
-    # (H<<32)
+    var carry_after_977 = c
     c = 0
     (l0, c) = add_carry(l0, (h0 << 32), 0)
     (l1, c) = add_carry(l1, (h0 >> 32), c)
@@ -46,8 +45,30 @@ fn probe_pm1_square_prereduce() raises:
     (l3, c) = add_carry(l3, (h2 >> 32), c)
     (l3, c) = add_carry(l3, (h3 << 32), c)
     (l4, c) = add_carry(l4, (h3 >> 32), c)
+    var extra_count: UInt64 = carry_after_977 + c
 
-    print("pm1^2 pre-reduce l0..l4:", l0, l1, l2, l3, l4)
+    print("pm1^2 pre-reduce l0..l4:", l0, l1, l2, l3, l4, " extra=", extra_count)
+
+    while l4 != 0 or extra_count != 0:
+        var top: UInt64
+        if l4 != 0:
+            top = l4
+            l4 = 0
+        else:
+            top = UInt64(1)
+            extra_count -= UInt64(1)
+        var cv: UInt64 = 0
+        var lo2: UInt64; var hi2: UInt64
+        (lo2, hi2) = mul64_128(top, 977)
+        (l0, cv) = add_carry(l0, lo2, 0)
+        (l1, cv) = add_carry(l1, hi2, cv)
+        (l0, cv) = add_carry(l0, (top << 32), cv)
+        (l1, cv) = add_carry(l1, (top >> 32), cv)
+        (l2, cv) = add_carry(l2, 0, cv)
+        (l3, cv) = add_carry(l3, 0, cv)
+        (l4, _)  = add_carry(l4, 0, cv)
+
+    print("pm1^2 post-fold l0..l4:", l0, l1, l2, l3, l4)
 
 fn main() raises:
     probe_pm1_square_prereduce()
