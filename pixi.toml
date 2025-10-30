@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "mojo-secp256k1"
 version = "0.1.0"
 description = "Deterministic secp256k1 signing primitives in Mojo"
