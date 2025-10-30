@@ -144,8 +144,8 @@ fn fe_add(a: Fe, b: Fe) -> Fe:
     for i in range(4):
         (d[i], borrow) = sub_borrow(out.v[i], p_limbs[i], borrow)
     # clamp multi-bit carry to boolean for masking
-    var p_or_c = UInt64(fe_ge(out, fe_p())) or UInt64(c != 0)
-    var mask = UInt64(0) - p_or_c
+    var p_or_c = UInt64(fe_ge(out, fe_p())) | UInt64(c != 0)
+    var mask = UInt64(0) - UInt64(p_or_c != 0)
     return fe_select(mask, fe_from_limbs(d), out)
 
 @always_inline
@@ -196,59 +196,83 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
             (t[k], carry) = add_carry(t[k], 0, carry)
             k += 1
 
-    var l0=t[0]; var l1=t[1]; var l2=t[2]; var l3=t[3]
-    var h0=t[4]; var h1=t[5]; var h2=t[6]; var h3=t[7]
-    var l4: UInt64 = 0  # explicit 5th limb accumulator
+    var l0 = t[0]; var l1 = t[1]; var l2 = t[2]; var l3 = t[3]
+    var h0 = t[4]; var h1 = t[5]; var h2 = t[6]; var h3 = t[7]
 
-    # ---- fold H * 977 into (l0..l4)
-    var c: UInt64 = 0
+    # Single-pass fold with C = 2^32 + 977  (since 2^256 ≡ C mod p)
+    alias C = UInt64(0x1000003D1)
+
+    # Work buffer with two extra limbs to catch cascaded carries
+    var l = InlineArray[UInt64, 6](l0, l1, l2, l3, 0, 0)
+
     var lo: UInt64; var hi: UInt64
-    (lo, hi) = mul64_128(h0, 977); (l0, c) = add_carry(l0, lo, 0);   (l1, c) = add_carry(l1, hi, c)
-    (lo, hi) = mul64_128(h1, 977); (l1, c) = add_carry(l1, lo, c);   (l2, c) = add_carry(l2, hi, c)
-    (lo, hi) = mul64_128(h2, 977); (l2, c) = add_carry(l2, lo, c);   (l3, c) = add_carry(l3, hi, c)
-    (lo, hi) = mul64_128(h3, 977); (l3, c) = add_carry(l3, lo, c);   (l4, c) = add_carry(l4, hi, c)
-    var carry_after_977 = c                    # 0 or 1
+    var c: UInt64
 
-    # ---- fold (H << 32) into (l0..l4), SEQUENTIALLY to preserve carries
+    # Add h0 * C at position 0
+    (lo, hi) = mul64_128(h0, C)
     c = 0
-    (l0, c) = add_carry(l0, (h0 << 32), 0)
-    (l1, c) = add_carry(l1, (h0 >> 32), c)
-    (l1, c) = add_carry(l1, (h1 << 32), c)
-    (l2, c) = add_carry(l2, (h1 >> 32), c)
-    (l2, c) = add_carry(l2, (h2 << 32), c)
-    (l3, c) = add_carry(l3, (h2 >> 32), c)
-    (l3, c) = add_carry(l3, (h3 << 32), c)
-    (l4, c) = add_carry(l4, (h3 >> 32), c)   # spill into l4
-    var extra_count: UInt64 = carry_after_977 + c   # 0,1,or 2
+    (l[0], c) = add_carry(l[0], lo, 0)
+    (l[1], c) = add_carry(l[1], hi, c)
+    (l[2], c) = add_carry(l[2], 0,  c)
+    (l[3], c) = add_carry(l[3], 0,  c)
+    (l[4], c) = add_carry(l[4], 0,  c)
+    (l[5], _) = add_carry(l[5], 0,  c)
 
-    # ---- while we still have a 5th limb, fold it once more
-    # In practice this loop runs 0 or 1 times.
-    while l4 != 0 or extra_count != 0:
-        var top = l4
-        if l4 != 0:
-            l4 = 0
-        else:
-            top = UInt64(1)          # one unit of (2^32 + 977)
-            extra_count -= UInt64(1)
-        var cv: UInt64 = 0
-        var lo2: UInt64; var hi2: UInt64
-        # add top * 977
-        (lo2, hi2) = mul64_128(top, 977)
-        (l0, cv) = add_carry(l0, lo2, 0)
-        (l1, cv) = add_carry(l1, hi2, cv)
-        # add (top << 32)
-        (l0, cv) = add_carry(l0, (top << 32), cv)
-        (l1, cv) = add_carry(l1, (top >> 32), cv)   # (top>>32) is 0 or small
-        # push any residual into l2..l4
-        (l2, cv) = add_carry(l2, 0, cv)
-        (l3, cv) = add_carry(l3, 0, cv)
-        (l4, _)  = add_carry(l4, 0, cv)            # new 5th limb if any
+    # Add h1 * C at position 1
+    (lo, hi) = mul64_128(h1, C)
+    c = 0
+    (l[1], c) = add_carry(l[1], lo, 0)
+    (l[2], c) = add_carry(l[2], hi, c)
+    (l[3], c) = add_carry(l[3], 0,  c)
+    (l[4], c) = add_carry(l[4], 0,  c)
+    (l[5], _) = add_carry(l[5], 0,  c)
 
-    var out = fe_from_limbs(InlineArray[UInt64,4](l0, l1, l2, l3))
+    # Add h2 * C at position 2
+    (lo, hi) = mul64_128(h2, C)
+    c = 0
+    (l[2], c) = add_carry(l[2], lo, 0)
+    (l[3], c) = add_carry(l[3], hi, c)
+    (l[4], c) = add_carry(l[4], 0,  c)
+    (l[5], _) = add_carry(l[5], 0,  c)
+
+    # Add h3 * C at position 3
+    (lo, hi) = mul64_128(h3, C)
+    c = 0
+    (l[3], c) = add_carry(l[3], lo, 0)
+    (l[4], c) = add_carry(l[4], hi, c)
+    (l[5], _) = add_carry(l[5], 0,  c)
+
+    # Re-fold any overflow limbs:
+    # l[4] corresponds to 2^256 * k  -> add k * C at pos 0
+    # l[5] corresponds to 2^320 * k  -> add k * C at pos 1  (since 2^320 ≡ (2^64)*C)
+    while l[4] != 0 or l[5] != 0:
+        if l[4] != 0:
+            var top0 = l[4]; l[4] = 0
+            (lo, hi) = mul64_128(top0, C)
+            c = 0
+            (l[0], c) = add_carry(l[0], lo, 0)
+            (l[1], c) = add_carry(l[1], hi, c)
+            (l[2], c) = add_carry(l[2], 0,  c)
+            (l[3], c) = add_carry(l[3], 0,  c)
+            (l[4], c) = add_carry(l[4], 0,  c)
+            (l[5], _) = add_carry(l[5], 0,  c)
+        if l[5] != 0:
+            var top1 = l[5]; l[5] = 0
+            (lo, hi) = mul64_128(top1, C)   # add starting at pos 1 (<<64)
+            c = 0
+            (l[1], c) = add_carry(l[1], lo, 0)
+            (l[2], c) = add_carry(l[2], hi, c)
+            (l[3], c) = add_carry(l[3], 0,  c)
+            (l[4], c) = add_carry(l[4], 0,  c)
+            (l[5], _) = add_carry(l[5], 0,  c)
+
+    var out = fe_from_limbs(InlineArray[UInt64,4](l[0], l[1], l[2], l[3]))
 
     # Canonicalize: at most 2 subtractions are ever needed
     out = reduce_once(out)
     out = reduce_once(out)
+    if DEBUG_FE:
+        print("out limbs:", out.v[0], out.v[1], out.v[2], out.v[3])
     return out^
 
 @always_inline

@@ -1,4 +1,4 @@
-from secp256k1.field_limb import fe_clone, fe_sub, fe_zero, fe_one, fe_sqr, fe_to_bytes32, fe_from_bytes32, fe_mul, add_carry, mul64_128
+from secp256k1.field_limb import fe_clone, fe_sub, fe_zero, fe_one, fe_sqr, fe_to_bytes32, fe_from_bytes32, fe_mul, add_carry, mul64_128, fe_p, fe_ge
 
 fn probe_pm1_square_prereduce() raises:
     var pm1 = fe_sub(fe_zero(), fe_one())
@@ -71,17 +71,18 @@ fn probe_pm1_square_prereduce() raises:
     print("pm1^2 post-fold l0..l4:", l0, l1, l2, l3, l4)
 
 fn main() raises:
-    probe_pm1_square_prereduce()
-    # (-1) == p-1
-    var m1 = fe_sub(fe_zero(), fe_one())
-
-    # (-1)^2 == 1
-    var sq = fe_sqr(m1)
+    # in test_field_limb.mojo
+    var pm1 = fe_sub(fe_p(), fe_one())
+    var pm1_sq = fe_sqr(pm1)
     var one = fe_one()
-    if sq.v[0] != one.v[0] or sq.v[1] != one.v[1] or sq.v[2] != one.v[2] or sq.v[3] != one.v[3]:
-        raise Error("(-1)^2 != 1")
+    # compare limbs directly; avoid 'assert' (not supported in your toolchain)
+    @parameter
+    for i in range(4):
+        if pm1_sq.v[i] != one.v[i]:
+            raise Error("(-1)^2 != 1")
 
     # Round-trip bytes for (-1)
+    var m1 = fe_sub(fe_zero(), fe_one())
     var b = fe_to_bytes32(m1)
     var rt = fe_from_bytes32(b)
     if rt.v[0]!=m1.v[0] or rt.v[1]!=m1.v[1] or rt.v[2]!=m1.v[2] or rt.v[3]!=m1.v[3]:
