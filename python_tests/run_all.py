@@ -5,6 +5,7 @@ MOJO_I = "-I . -I decimojo/src -I keccak"
 
 # Core Mojo tests
 MOJO_TESTS = [
+    "test_field_limb.mojo",         # Field arithmetic tests
     "test_secp256k1.mojo",          # Core scalar/point operations
     "test_secp256k1_kat.mojo",      # Known-answer tests
     "test_seckp256k1_rfc6979.mojo", # RFC6979 deterministic k generation

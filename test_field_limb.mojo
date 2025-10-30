@@ -54,7 +54,46 @@ fn dbg_bytes(label: String, b: List[Int]):
         i += 1
 
 
+fn dbg_hex(b: List[Int]) -> String:
+    var s = ""
+    var i = 0
+    while i < len(b):
+        var v = b[i]
+        var hi = "0123456789abcdef"[Int((v >> 4) & 15)]
+        var lo = "0123456789abcdef"[Int(v & 15)]
+        s = s + String(hi) + String(lo)
+        i += 1
+    return s
+
+fn dump_mul(a_hex: String, b_hex: String) raises:
+    var a = fe_from_bytes32(be_hex_bytes(a_hex))
+    var b = fe_from_bytes32(be_hex_bytes(b_hex))
+    var c = fe_mul(a, b)
+    print("A=", a_hex)
+    print("B=", b_hex)
+    print("C=", dbg_hex(fe_to_bytes32(c)))
+
+fn dbg_hex(b: List[Int]) -> String:
+    var s = ""
+    var i = 0
+    while i < len(b):
+        var v = b[i]
+        var hi = "0123456789abcdef"[Int((v >> 4) & 15)]
+        var lo = "0123456789abcdef"[Int(v & 15)]
+        s = s + String(hi) + String(lo)
+        i += 1
+    return s
+
+fn dump_mul(a_hex: String, b_hex: String) raises:
+    var a = fe_from_bytes32(be_hex_bytes(a_hex))
+    var b = fe_from_bytes32(be_hex_bytes(b_hex))
+    var c = fe_mul(a, b)
+    print("A=", a_hex)
+    print("B=", b_hex)
+    print("C=", dbg_hex(fe_to_bytes32(c)))
+
 fn main() raises:
+    dump_mul("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2E", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2E")
     # p in BE
     var p_be = be_hex_bytes("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
 
@@ -97,6 +136,11 @@ fn main() raises:
 
     # (p-1)*(p-1) == 1
     expect_one(fe_mul(fe_clone(pm1), fe_clone(pm1)), "(p-1)*(p-1)")
+
+    # 2 * (p-1) == p-2
+    var two = fe_from_limbs(InlineArray[UInt64,4](2,0,0,0))
+    var pm2 = fe_sub(fe_zero(), two)
+    assert_eq_bytes(fe_to_bytes32(fe_mul(two, fe_clone(pm1))), fe_to_bytes32(pm2), "2*(p-1) != p-2")
 
     # small mul: 2*3 == 6
     var two = fe_from_limbs(InlineArray[UInt64,4](2,0,0,0))
