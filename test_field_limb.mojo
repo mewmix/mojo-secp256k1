@@ -2,7 +2,8 @@
 from secp256k1.field_limb import (
     Fe, fe_zero, fe_one, fe_p, fe_clone,
     fe_add, fe_sub, fe_neg, fe_mul, fe_sqr, fe_inv,
-    fe_from_limbs, fe_from_bytes32, fe_to_bytes32
+    fe_from_limbs, fe_from_bytes32, fe_to_bytes32,
+    fe_debug_pm1_square_prereduce
 )
 from collections.inline_array import InlineArray
 
@@ -54,7 +55,27 @@ fn dbg_bytes(label: String, b: List[Int]):
         i += 1
 
 
+fn dbg_hex(b: List[Int]) -> String:
+    var s = ""
+    var i = 0
+    while i < len(b):
+        var v = b[i]
+        var hi = "0123456789abcdef"[Int((v >> 4) & 15)]
+        var lo = "0123456789abcdef"[Int(v & 15)]
+        s = s + String(hi) + String(lo)
+        i += 1
+    return s
+
+fn dump_mul(a_hex: String, b_hex: String) raises:
+    var a = fe_from_bytes32(be_hex_bytes(a_hex))
+    var b = fe_from_bytes32(be_hex_bytes(b_hex))
+    var c = fe_mul(a, b)
+    print("A=", a_hex)
+    print("B=", b_hex)
+    print("C=", dbg_hex(fe_to_bytes32(c)))
+
 fn main() raises:
+    dump_mul("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2E", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2E")
     # p in BE
     var p_be = be_hex_bytes("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
 
@@ -93,13 +114,20 @@ fn main() raises:
     dbg_fe("(-1)^2 limbs:", sq)
     dbg_bytes("(-1)^2 bytes:", fe_to_bytes32(sq))
 
+    var pre = fe_debug_pm1_square_prereduce()
+    print("pm1^2 pre-reduce l0..l4:", pre[0], pre[1], pre[2], pre[3], pre[4])
+
     expect_one(sq, "(-1)^2")
 
     # (p-1)*(p-1) == 1
     expect_one(fe_mul(fe_clone(pm1), fe_clone(pm1)), "(p-1)*(p-1)")
 
-    # small mul: 2*3 == 6
+    # 2 * (p-1) == p-2
     var two = fe_from_limbs(InlineArray[UInt64,4](2,0,0,0))
+    var pm2 = fe_sub(fe_zero(), two)
+    assert_eq_bytes(fe_to_bytes32(fe_mul(two, fe_clone(pm1))), fe_to_bytes32(pm2), "2*(p-1) != p-2")
+
+    # small mul: 2*3 == 6
     var three = fe_from_limbs(InlineArray[UInt64,4](3,0,0,0))
     var six = fe_from_limbs(InlineArray[UInt64,4](6,0,0,0))
     assert_eq_bytes(fe_to_bytes32(fe_mul(two, three)), fe_to_bytes32(six), "2*3 != 6")
