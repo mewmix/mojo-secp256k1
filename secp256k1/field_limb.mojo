@@ -77,21 +77,21 @@ fn fe_p() -> Fe:
 # --- limb utils ---
 @always_inline
 fn add_carry(a: UInt64, b: UInt64, c: UInt64) -> Tuple[UInt64, UInt64]:
-    # returns (sum, carry ∈ {0,1,2})
+    # returns (sum, carry ∈ {0,1,2})  — adding three 64-bit values
     var s = a + b
-    var c1 = UInt64(s < a)
+    var c1 = UInt64(s < a)           # 0 or 1
     s = s + c
-    var c2 = UInt64(s < c)
-    return (s, c1 + c2)
+    var c2 = UInt64(s < c)           # 0 or 1
+    return (s, c1 + c2)              # 0..2
 
 @always_inline
 fn sub_borrow(a: UInt64, b: UInt64, borrow: UInt64) -> Tuple[UInt64, UInt64]:
     # computes a - b - borrow, returns (diff, borrow_out ∈ {0,1,2})
     var t = a - b
-    var b1 = UInt64(a < b)
+    var b1 = UInt64(a < b)           # 0 or 1
     var u = t - borrow
-    var b2 = UInt64(t < borrow)
-    return (u, b1 + b2)
+    var b2 = UInt64(t < borrow)      # 0 or 1
+    return (u, b1 + b2)              # 0..2
 
 @always_inline
 fn mul64_128(a: UInt64, b: UInt64) -> Tuple[UInt64, UInt64]:
@@ -144,7 +144,7 @@ fn fe_add(a: Fe, b: Fe) -> Fe:
     for i in range(4):
         (d[i], borrow) = sub_borrow(out.v[i], p_limbs[i], borrow)
     # clamp multi-bit carry to boolean for masking
-    var p_or_c = UInt64(fe_ge(out, fe_p())) | UInt64(c != 0)
+    var p_or_c = UInt64(fe_ge(out, fe_p())) or UInt64(c != 0)
     var mask = UInt64(0) - p_or_c
     return fe_select(mask, fe_from_limbs(d), out)
 
@@ -163,7 +163,7 @@ fn fe_sub(a: Fe, b: Fe) -> Fe:
     for i in range(4):
         (d[i], c) = add_carry(r[i], p_limbs[i], c)
     # clamp multi-bit borrow to boolean for masking
-    var mask = UInt64(0) - UInt64(borrow != 0)
+    var mask = UInt64(0) - UInt64(borrow > 0)
     return fe_select(mask, fe_from_limbs(d), fe_from_limbs(r))
 
 @always_inline
@@ -207,6 +207,7 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     (lo, hi) = mul64_128(h1, 977); (l1, c) = add_carry(l1, lo, c);   (l2, c) = add_carry(l2, hi, c)
     (lo, hi) = mul64_128(h2, 977); (l2, c) = add_carry(l2, lo, c);   (l3, c) = add_carry(l3, hi, c)
     (lo, hi) = mul64_128(h3, 977); (l3, c) = add_carry(l3, lo, c);   (l4, c) = add_carry(l4, hi, c)
+    var carry_after_977 = c                    # 0 or 1
 
     # ---- fold (H << 32) into (l0..l4), SEQUENTIALLY to preserve carries
     c = 0
@@ -217,13 +218,18 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     (l2, c) = add_carry(l2, (h2 << 32), c)
     (l3, c) = add_carry(l3, (h2 >> 32), c)
     (l3, c) = add_carry(l3, (h3 << 32), c)
-    (l4, c) = add_carry(l4, (h3 >> 32), c)   # the <<32 spill goes into l4
+    (l4, c) = add_carry(l4, (h3 >> 32), c)   # spill into l4
+    var extra_count: UInt64 = carry_after_977 + c   # 0,1,or 2
 
     # ---- while we still have a 5th limb, fold it once more
     # In practice this loop runs 0 or 1 times.
-    while l4 != 0:
+    while l4 != 0 or extra_count != 0:
         var top = l4
-        l4 = 0
+        if l4 != 0:
+            l4 = 0
+        else:
+            top = UInt64(1)          # one unit of (2^32 + 977)
+            extra_count -= UInt64(1)
         var cv: UInt64 = 0
         var lo2: UInt64; var hi2: UInt64
         # add top * 977
