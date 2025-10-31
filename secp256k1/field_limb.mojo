@@ -242,29 +242,30 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     (l[4], c) = add_carry(l[4], hi, c)
     (l[5], _) = add_carry(l[5], 0,  c)
 
-    # Re-fold any overflow limbs:
-    # l[4] corresponds to 2^256 * k  -> add k * C at pos 0
-    # l[5] corresponds to 2^320 * k  -> add k * C at pos 1  (since 2^320 ≡ (2^64)*C)
+    # Re-fold any overflow limbs. This is the critical part where carries can get dropped.
+    # A single limb `l[i]` overflowing corresponds to `k * 2^(64*i)`.
+    # Since `2^256 = C`, `l[4]` corresponds to `k * C`, so we add `k*C` at position 0.
+    # `l[5]` corresponds to `k * 2^64 * C`, so we add `k*C` at position 1.
     while l[4] != 0 or l[5] != 0:
-        if l[4] != 0:
-            var top0 = l[4]; l[4] = 0
-            (lo, hi) = mul64_128(top0, C)
-            c = 0
-            (l[0], c) = add_carry(l[0], lo, 0)
-            (l[1], c) = add_carry(l[1], hi, c)
-            (l[2], c) = add_carry(l[2], 0,  c)
-            (l[3], c) = add_carry(l[3], 0,  c)
-            (l[4], c) = add_carry(l[4], 0,  c)
-            (l[5], _) = add_carry(l[5], 0,  c)
         if l[5] != 0:
-            var top1 = l[5]; l[5] = 0
-            (lo, hi) = mul64_128(top1, C)   # add starting at pos 1 (<<64)
-            c = 0
+            var k = l[5]; l[5] = 0
+            var lo, hi = mul64_128(k, C)
+            var c: UInt64 = 0
             (l[1], c) = add_carry(l[1], lo, 0)
             (l[2], c) = add_carry(l[2], hi, c)
-            (l[3], c) = add_carry(l[3], 0,  c)
-            (l[4], c) = add_carry(l[4], 0,  c)
-            (l[5], _) = add_carry(l[5], 0,  c)
+            var i = 3
+            while c != 0 and i < 6:
+                (l[i], c) = add_carry(l[i], 0, c); i+=1
+
+        if l[4] != 0:
+            var k = l[4]; l[4] = 0
+            var lo, hi = mul64_128(k, C)
+            var c: UInt64 = 0
+            (l[0], c) = add_carry(l[0], lo, 0)
+            (l[1], c) = add_carry(l[1], hi, c)
+            var i = 2
+            while c != 0 and i < 6:
+                (l[i], c) = add_carry(l[i], 0, c); i+=1
 
     var out = fe_from_limbs(InlineArray[UInt64,4](l[0], l[1], l[2], l[3]))
 
