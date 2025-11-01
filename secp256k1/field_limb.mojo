@@ -4,12 +4,12 @@
 
 from collections.inline_array import InlineArray
 
-alias DEBUG_FE = False
+alias DEBUG_FE = True
 
 @always_inline
-fn dbg_r(label: String, r: InlineArray[UInt64,6]):
+fn dbg_fe(label: String, a: Fe):
     if DEBUG_FE:
-        print(label, r[0], r[1], r[2], r[3], r[4], r[5])
+        print(label, a.v[0], a.v[1], a.v[2], a.v[3])
 
 struct Fe(Movable):
     var v: InlineArray[UInt64, 4]  # little-endian limbs v[0] + 2^64 v[1] + ...
@@ -77,21 +77,21 @@ fn fe_p() -> Fe:
 # --- limb utils ---
 @always_inline
 fn add_carry(a: UInt64, b: UInt64, c: UInt64) -> Tuple[UInt64, UInt64]:
-    # returns (sum, carry ∈ {0,1,2})  — adding three 64-bit values
+    # returns (sum, carry ∈ {0,1,2})
     var s = a + b
-    var c1 = UInt64(s < a)           # 0 or 1
+    var c1 = UInt64(s < a)
     s = s + c
-    var c2 = UInt64(s < c)           # 0 or 1
-    return (s, c1 + c2)              # 0..2
+    var c2 = UInt64(s < c)
+    return (s, c1 + c2)
 
 @always_inline
 fn sub_borrow(a: UInt64, b: UInt64, borrow: UInt64) -> Tuple[UInt64, UInt64]:
-    # computes a - b - borrow, returns (diff, borrow_out ∈ {0,1,2})
+    # computes a - b - borrow, returns (diff, borrow_out ∈ {0,1})
     var t = a - b
-    var b1 = UInt64(a < b)           # 0 or 1
+    var b1 = UInt64(t > a)
     var u = t - borrow
-    var b2 = UInt64(t < borrow)      # 0 or 1
-    return (u, b1 + b2)              # 0..2
+    var b2 = UInt64(u > t)
+    return (u, b1 + b2)
 
 @always_inline
 fn mul64_128(a: UInt64, b: UInt64) -> Tuple[UInt64, UInt64]:
@@ -126,7 +126,6 @@ fn fe_select(mask: UInt64, x: Fe, y: Fe) -> Fe:
         r[i] = (x.v[i] & mask) | (y.v[i] & ~mask)
     return fe_from_limbs(r)
 
-
 # --- canonical add/sub ---
 @always_inline
 fn fe_add(a: Fe, b: Fe) -> Fe:
@@ -144,8 +143,8 @@ fn fe_add(a: Fe, b: Fe) -> Fe:
     for i in range(4):
         (d[i], borrow) = sub_borrow(out.v[i], p_limbs[i], borrow)
     # clamp multi-bit carry to boolean for masking
-    var p_or_c = UInt64(fe_ge(out, fe_p())) | UInt64(c != 0)
-    var mask = UInt64(0) - UInt64(p_or_c != 0)
+    var p_or_c = UInt64(fe_ge(out, fe_p())) or UInt64(c != 0)
+    var mask = UInt64(0) - p_or_c
     return fe_select(mask, fe_from_limbs(d), out)
 
 @always_inline
@@ -178,6 +177,7 @@ fn reduce_once(a: Fe) -> Fe:
     return fe_select(mask, sub_res, a)
 
 fn fe_mul(a: Fe, b: Fe) raises -> Fe:
+    # Schoolbook multiplication: 4x4 -> 8 limbs
     var t = InlineArray[UInt64,8](0,0,0,0,0,0,0,0)
     @parameter
     for i in range(4):
@@ -185,95 +185,66 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
         @parameter
         for j in range(4):
             var lo, hi = mul64_128(a.v[i], b.v[j])
-            var s, c = add_carry(t[i+j], lo, 0)
-            (s, c) = add_carry(s, carry, c)
-            t[i+j] = s
-            var s2, c2 = add_carry(t[i+j+1], hi, c)
-            t[i+j+1] = s2
-            carry = c2
+            var s, c1 = add_carry(t[i+j], lo, 0)
+            var s2, c2 = add_carry(s, carry, c1)
+            t[i+j] = s2
+            carry = hi + c2
+        # Propagate remaining carry
         var k = i + 4
-        while carry != 0:
-            (t[k], carry) = add_carry(t[k], 0, carry)
+        while carry != 0 and k < 8:
+            (t[k], carry) = add_carry(t[k], carry, 0)
             k += 1
 
+    # Extract low and high parts
     var l0 = t[0]; var l1 = t[1]; var l2 = t[2]; var l3 = t[3]
     var h0 = t[4]; var h1 = t[5]; var h2 = t[6]; var h3 = t[7]
 
-    # Single-pass fold with C = 2^32 + 977  (since 2^256 ≡ C mod p)
-    alias C = UInt64(0x1000003D1)
+    # For secp256k1: 2^256 ≡ 2^32 + 977 (mod p)
+    # So result = l + h * (2^32 + 977)
 
-    # Work buffer with two extra limbs to catch cascaded carries
-    var l = InlineArray[UInt64, 6](l0, l1, l2, l3, 0, 0)
+    var c: UInt64 = 0
+    var lo, hi = mul64_128(h0, 977)
+    (l0, c) = add_carry(l0, lo, 0)
+    (l1, c) = add_carry(l1, hi, c)
+    lo, hi = mul64_128(h1, 977)
+    (l1, c) = add_carry(l1, lo, c)
+    (l2, c) = add_carry(l2, hi, c)
+    lo, hi = mul64_128(h2, 977)
+    (l2, c) = add_carry(l2, lo, c)
+    (l3, c) = add_carry(l3, hi, c)
+    lo, hi = mul64_128(h3, 977)
+    (l3, c) = add_carry(l3, lo, c)
+    var l4: UInt64 = c
 
-    var lo: UInt64; var hi: UInt64
-    var c: UInt64
-
-    # Add h0 * C at position 0
-    (lo, hi) = mul64_128(h0, C)
+    # Now add h << 32
     c = 0
-    (l[0], c) = add_carry(l[0], lo, 0)
-    (l[1], c) = add_carry(l[1], hi, c)
-    (l[2], c) = add_carry(l[2], 0,  c)
-    (l[3], c) = add_carry(l[3], 0,  c)
-    (l[4], c) = add_carry(l[4], 0,  c)
-    (l[5], _) = add_carry(l[5], 0,  c)
+    (l0, c) = add_carry(l0, h0 << 32, 0)
+    (l1, c) = add_carry(l1, h0 >> 32, c)
+    (l1, c) = add_carry(l1, h1 << 32, c)
+    (l2, c) = add_carry(l2, h1 >> 32, c)
+    (l2, c) = add_carry(l2, h2 << 32, c)
+    (l3, c) = add_carry(l3, h2 >> 32, c)
+    (l3, c) = add_carry(l3, h3 << 32, c)
+    (l4, c) = add_carry(l4, h3 >> 32, c)
 
-    # Add h1 * C at position 1
-    (lo, hi) = mul64_128(h1, C)
-    c = 0
-    (l[1], c) = add_carry(l[1], lo, 0)
-    (l[2], c) = add_carry(l[2], hi, c)
-    (l[3], c) = add_carry(l[3], 0,  c)
-    (l[4], c) = add_carry(l[4], 0,  c)
-    (l[5], _) = add_carry(l[5], 0,  c)
+    # Now we have result in l0-l4, need to reduce to 4 limbs
+    while l4 > 0:
+        var top = l4
+        l4 = 0
+        c = 0
+        lo, hi = mul64_128(top, 977)
+        (l0, c) = add_carry(l0, lo, c)
+        (l1, c) = add_carry(l1, hi, c)
+        (l0, c) = add_carry(l0, top << 32, c)
+        (l1, c) = add_carry(l1, top >> 32, c)
+        (l2, c) = add_carry(l2, 0, c)
+        (l3, c) = add_carry(l3, 0, c)
+        (l4, c) = add_carry(l4, 0, c)
 
-    # Add h2 * C at position 2
-    (lo, hi) = mul64_128(h2, C)
-    c = 0
-    (l[2], c) = add_carry(l[2], lo, 0)
-    (l[3], c) = add_carry(l[3], hi, c)
-    (l[4], c) = add_carry(l[4], 0,  c)
-    (l[5], _) = add_carry(l[5], 0,  c)
-
-    # Add h3 * C at position 3
-    (lo, hi) = mul64_128(h3, C)
-    c = 0
-    (l[3], c) = add_carry(l[3], lo, 0)
-    (l[4], c) = add_carry(l[4], hi, c)
-    (l[5], _) = add_carry(l[5], 0,  c)
-
-    # Re-fold any overflow limbs. This is the critical part where carries can get dropped.
-    # A single limb `l[i]` overflowing corresponds to `k * 2^(64*i)`.
-    # Since `2^256 = C`, `l[4]` corresponds to `k * C`, so we add `k*C` at position 0.
-    # `l[5]` corresponds to `k * 2^64 * C`, so we add `k*C` at position 1.
-    while l[4] != 0 or l[5] != 0:
-        if l[5] != 0:
-            var k = l[5]; l[5] = 0
-            var lo, hi = mul64_128(k, C)
-            var c: UInt64 = 0
-            (l[1], c) = add_carry(l[1], lo, 0)
-            (l[2], c) = add_carry(l[2], hi, c)
-            var i = 3
-            while c != 0 and i < 6:
-                (l[i], c) = add_carry(l[i], 0, c); i+=1
-
-        if l[4] != 0:
-            var k = l[4]; l[4] = 0
-            var lo, hi = mul64_128(k, C)
-            var c: UInt64 = 0
-            (l[0], c) = add_carry(l[0], lo, 0)
-            (l[1], c) = add_carry(l[1], hi, c)
-            var i = 2
-            while c != 0 and i < 6:
-                (l[i], c) = add_carry(l[i], 0, c); i+=1
-
-    var out = fe_from_limbs(InlineArray[UInt64,4](l[0], l[1], l[2], l[3]))
-
-    # Canonicalize: at most 2 subtractions are ever needed
+    var out = fe_from_limbs(InlineArray[UInt64,4](l0, l1, l2, l3))
+    # Final reduction (at most 2 subtractions needed)
     out = reduce_once(out)
     out = reduce_once(out)
-    if DEBUG_FE:
-        print("out limbs:", out.v[0], out.v[1], out.v[2], out.v[3])
     return out^
 
 @always_inline
@@ -281,7 +252,6 @@ fn fe_sqr(a: Fe) raises -> Fe:
     return fe_mul(a, a)
 
 # --- exponentiation by square-and-multiply for inversion (a^(p-2)) ---
-# No BigInt or division needed, just field ops. Slower than EGCD, but simple & safe.
 fn fe_pow(a: Fe, exp_be: InlineArray[UInt64,4]) raises -> Fe:
     var base = fe_clone(a)
     var acc = fe_one()
@@ -291,10 +261,10 @@ fn fe_pow(a: Fe, exp_be: InlineArray[UInt64,4]) raises -> Fe:
         var bit = 0
         while bit < 64:
             var acc_sq = fe_sqr(acc)
-            acc = acc_sq^  # move
+            acc = acc_sq^
             if (word & (UInt64(1) << UInt64(63 - bit))) != UInt64(0):
                 var acc_mul = fe_mul(acc, base)
-                acc = acc_mul^  # move
+                acc = acc_mul^
             bit += 1
         limb -= 1
     return acc^
@@ -302,8 +272,8 @@ fn fe_pow(a: Fe, exp_be: InlineArray[UInt64,4]) raises -> Fe:
 fn fe_inv(a: Fe) raises -> Fe:
     # exp = p-2 = FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2D
     var e = InlineArray[UInt64,4](
-        0xFFFFFC2D,
-        0xFFFFFFFE,
+        0xFFFFFFFEFFFFFC2D,  # Note: this is P0 - 2
+        0xFFFFFFFFFFFFFFFF,
         0xFFFFFFFFFFFFFFFF,
         0xFFFFFFFFFFFFFFFF
     )

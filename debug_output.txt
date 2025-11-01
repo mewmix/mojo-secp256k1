@@ -1,0 +1,40 @@
+/app/tests/test_field_limb.mojo:55:26: warning: assignment to 'cv' was never used; assign to '_' instead?
+        var cv: UInt64 = 0
+                         ^
+/app/tests/test_field_limb.mojo:30:21: warning: assignment to 'c' was never used; assign to '_' instead?
+    var c: UInt64 = 0; var lo: UInt64; var hi: UInt64
+                    ^
+/app/tests/test_field_limb.mojo:36:9: warning: assignment to 'c' was never used; assign to '_' instead?
+    c = 0
+        ^
+Included from /app/tests/test_field_limb.mojo:1:
+/app/./secp256k1/field_limb.mojo:242:12: warning: assignment to 'c' was never used; assign to '_' instead?
+        (l4, c) = add_carry(l4, 0, c)
+           ^
+Included from /app/tests/test_field_limb.mojo:1:
+/app/./secp256k1/field_limb.mojo:205:21: warning: assignment to 'c' was never used; assign to '_' instead?
+    var c: UInt64 = 0
+                    ^
+Included from /app/tests/test_field_limb.mojo:1:
+/app/./secp256k1/field_limb.mojo:215:7: warning: assignment to 'hi' was never used; assign to '_' instead?
+    lo, hi = mul64_128(h3, 977)
+      ^
+Included from /app/tests/test_field_limb.mojo:1:
+/app/./secp256k1/field_limb.mojo:220:9: warning: assignment to 'c' was never used; assign to '_' instead?
+    c = 0
+        ^
+Included from /app/tests/test_field_limb.mojo:1:
+/app/./secp256k1/field_limb.mojo:228:8: warning: assignment to 'c' was never used; assign to '_' instead?
+    (l4, c) = add_carry(l4, h3 >> 32, c)
+       ^
+pm1^2 pre-reduce l0..l4: 18446735681342500704 18446744069414583343 18446744069414583343 18446744069414583343 4294968271  extra= 0
+pm1^2 post-fold l0..l4: 18446744065119615071 18446744069414583344 18446744069414583343 18446744069414583343 0
+pm1 (p-1): 18446744069414583342 18446744073709551615 18446744073709551615 18446744073709551615
+one: 1 0 0 0
+pm1_sq: 18446739864640644077 4294968273 1 18446744069414583344
+#0 0x00007fbc023ec95b llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/app/.pixi/envs/default/lib/libKGENCompilerRTShared.so+0x3d395b)
+#1 0x00007fbc02311202 KGEN_CompilerRT_GetStackTrace (/app/.pixi/envs/default/lib/libKGENCompilerRTShared.so+0x2f8202)
+#2 0x00007fbba40025fb
+
+Unhandled exception caught during execution: (-1)^2 != 1
+/app/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
