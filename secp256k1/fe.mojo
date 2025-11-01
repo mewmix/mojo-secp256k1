@@ -1,116 +1,86 @@
-"""secp256k1 field arithmetic backed by DeciMojo BigInt."""
+# secp256k1/fe.mojo
+# This module provides field arithmetic for the secp256k1 prime field.
+# It acts as a bridge to the pure-limb implementation in `field_limb.mojo`.
 
-from decimojo import BigInt
-from decimojo.bigint.bigint import BigUInt
-
-
-fn make_bigint(var words: List[UInt32]) -> BigInt:
-    var magnitude = BigUInt()
-    magnitude.words = words^
-    var out = BigInt()
-    out.magnitude = magnitude
-    out.sign = False
-    return out
-
-
-alias FIELD_P = make_bigint(
-    List[UInt32](
-        UInt32(834671663),
-        UInt32(584007908),
-        UInt32(564039457),
-        UInt32(984665640),
-        UInt32(907853269),
-        UInt32(985008687),
-        UInt32(195423570),
-        UInt32(89237316),
-        UInt32(115792),
-    )
+from .field_limb import (
+    Fe as FeLimb,
+    fe_zero as fe_zero_limb,
+    fe_one as fe_one_limb,
+    fe_clone as fe_clone_limb,
+    fe_add as fe_add_limb,
+    fe_sub as fe_sub_limb,
+    fe_neg as fe_neg_limb,
+    fe_mul as fe_mul_limb,
+    fe_sqr as fe_sqr_limb,
+    fe_inv as fe_inv_limb,
+    fe_normalize_strong as fe_normalize_strong_limb,
+    fe_from_bytes32 as fe_from_bytes32_limb,
+    fe_to_bytes32 as fe_to_bytes32_limb,
 )
 
+# Re-export the main struct type.
+alias Fe = FeLimb
 
-fn _mod_positive(value: BigInt, modulus: BigInt) raises -> BigInt:
-    var r = value.truncate_modulo(modulus)
-    if r < BigInt(0):
-        r = r + modulus
-    return r
-
-
-fn mod_pow(base: BigInt, exp: BigInt, modulus: BigInt) raises -> BigInt:
-    var res = BigInt(1)
-    var b = base
-    var e = exp
-    while e > BigInt(0):
-        if e % BigInt(2) == BigInt(1):
-            res = _mod_positive(res * b, modulus)
-        b = _mod_positive(b * b, modulus)
-        e = e // BigInt(2)
-    return res
-
-
-struct Fe(Movable):
-    var value: BigInt
-
-    fn __init__(out self):
-        self.value = BigInt()
-
-
-@always_inline
-fn _fe_from_int(value: BigInt) raises -> Fe:
-    var r = Fe()
-    r.value = _mod_positive(value, FIELD_P)
-    return r^
-
-
-@always_inline
-fn _fe_to_int(a: Fe) -> BigInt:
-    return a.value
-
+# --- Constant Constructors ---
 
 fn fe_zero() raises -> Fe:
-    return _fe_from_int(BigInt(0))
-
+    """Returns the field element representing zero."""
+    return fe_zero_limb()
 
 fn fe_one() raises -> Fe:
-    return _fe_from_int(BigInt(1))
+    """Returns the field element representing one."""
+    return fe_one_limb()
 
+# --- Core Operations ---
 
 fn fe_copy(a: Fe) -> Fe:
-    var r = Fe()
-    r.value = a.value
-    return r^
-
+    """Creates a copy of a field element."""
+    return fe_clone_limb(a)
 
 fn fe_add(a: Fe, b: Fe) raises -> Fe:
-    return _fe_from_int(a.value + b.value)
-
+    """Adds two field elements."""
+    return fe_add_limb(a, b)
 
 fn fe_sub(a: Fe, b: Fe) raises -> Fe:
-    return _fe_from_int(a.value - b.value)
-
+    """Subtracts one field element from another."""
+    return fe_sub_limb(a, b)
 
 fn fe_neg(a: Fe) raises -> Fe:
-    if a.value.is_zero():
-        return fe_zero()
-    return _fe_from_int(FIELD_P - a.value)
-
+    """Negates a field element."""
+    return fe_neg_limb(a)
 
 fn fe_mul(a: Fe, b: Fe) raises -> Fe:
-    return _fe_from_int(a.value * b.value)
-
+    """Multiplies two field elements."""
+    return fe_mul_limb(a, b)
 
 fn fe_sqr(a: Fe) raises -> Fe:
-    return fe_mul(a, a)
-
+    """Squares a field element."""
+    return fe_sqr_limb(a)
 
 fn fe_inv(a: Fe) raises -> Fe:
-    var val = _mod_positive(a.value, FIELD_P)
-    if val.is_zero():
-        raise Error("inverse does not exist for zero field element")
-    
-    var exp = FIELD_P - BigInt(2)
-    var inv = mod_pow(val, exp, FIELD_P)
-    return _fe_from_int(inv)
+    """Computes the modular multiplicative inverse of a field element."""
+    return fe_inv_limb(a)
 
+# --- Normalization ---
 
 fn fe_normalize_strong(mut a: Fe) raises:
-    a.value = _mod_positive(a.value, FIELD_P)
+    """
+    Normalizes a field element to its canonical representation.
+    NOTE: In the limb-based backend, all operations maintain canonical form,
+    so this function is a no-op. It exists for API compatibility with
+    the previous DeciMojo-based implementation.
+    """
+    # The new implementation keeps Fe canonical, so this is a no-op.
+    # The `mut a` is not modified.
+    pass
+
+
+# --- Byte Conversion ---
+
+fn fe_from_bytes32(b: List[Int]) -> Fe:
+    """Converts a 32-byte big-endian byte slice to a field element."""
+    return fe_from_bytes32_limb(b)
+
+fn fe_to_bytes32(a: Fe) -> List[Int]:
+    """Converts a field element to a 32-byte big-endian byte slice."""
+    return fe_to_bytes32_limb(a)
