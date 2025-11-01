@@ -4,11 +4,30 @@
 
 from collections.inline_array import InlineArray
 
-alias DEBUG_FE = True
+@always_inline
+fn fe_debug_enabled() -> Bool:
+    return True
+
+@always_inline
+fn fe_mul_trace_enabled() -> Bool:
+    return False
+
+alias MASK_U64 = UInt128(0xFFFFFFFFFFFFFFFF)
+
+fn dbg_array_u64[size: Int](label: String, arr: InlineArray[UInt64, size]):
+    if fe_mul_trace_enabled():
+        print(label, "= [", end="")
+        var i = 0
+        while i < size:
+            print(arr[i], end="")
+            if i < size - 1:
+                print(", ", end="")
+            i += 1
+        print("]")
 
 @always_inline
 fn dbg_fe(label: String, a: Fe):
-    if DEBUG_FE:
+    if fe_debug_enabled():
         print(label, a.v[0], a.v[1], a.v[2], a.v[3])
 
 struct Fe(Movable):
@@ -177,23 +196,40 @@ fn reduce_once(a: Fe) -> Fe:
     return fe_select(mask, sub_res, a)
 
 fn fe_mul(a: Fe, b: Fe) raises -> Fe:
-    # Schoolbook multiplication: 4x4 -> 8 limbs
+    if fe_mul_trace_enabled():
+        print("--- fe_mul start ---")
+        dbg_array_u64[4]("a.v", a.v)
+        dbg_array_u64[4]("b.v", b.v)
+
+    # Schoolbook multiplication: 4x4 -> 8 limbs (512-bit product)
     var t = InlineArray[UInt64,8](0,0,0,0,0,0,0,0)
     @parameter
     for i in range(4):
-        var carry: UInt64 = 0
+        var carry = UInt128(0)
         @parameter
         for j in range(4):
-            var lo, hi = mul64_128(a.v[i], b.v[j])
-            var s, c1 = add_carry(t[i+j], lo, 0)
-            var s2, c2 = add_carry(s, carry, c1)
-            t[i+j] = s2
-            carry = hi + c2
-        # Propagate remaining carry
-        var k = i + 4
-        while carry != 0 and k < 8:
-            (t[k], carry) = add_carry(t[k], carry, 0)
-            k += 1
+            var lo: UInt64; var hi: UInt64
+            (lo, hi) = mul64_128(a.v[i], b.v[j])
+            var total = UInt128(t[i+j]) + UInt128(lo) + carry
+            t[i+j] = UInt64(total & MASK_U64)
+            carry = (total >> 64) + UInt128(hi)
+
+        var idx = i + 4
+        while carry != UInt128(0):
+            if idx >= 8:
+                if carry != UInt128(0):
+                    raise Error("carry overflow in fe_mul")
+                break
+            var limb = UInt64(carry & MASK_U64)
+            var next_carry = carry >> 64
+            var sum: UInt64; var spill: UInt64
+            (sum, spill) = add_carry(t[idx], limb, UInt64(0))
+            t[idx] = sum
+            carry = next_carry + UInt128(spill)
+            idx += 1
+
+    if fe_mul_trace_enabled():
+        dbg_array_u64[8]("t (after schoolbook)", t)
 
     # Extract low and high parts
     var l0 = t[0]; var l1 = t[1]; var l2 = t[2]; var l3 = t[3]
@@ -214,7 +250,8 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     (l3, c) = add_carry(l3, hi, c)
     lo, hi = mul64_128(h3, 977)
     (l3, c) = add_carry(l3, lo, c)
-    var l4: UInt64 = c
+    var l4: UInt64 = 0
+    (l4, c) = add_carry(l4, hi, c)
 
     # Now add h << 32
     c = 0
@@ -227,10 +264,20 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     (l3, c) = add_carry(l3, h3 << 32, c)
     (l4, c) = add_carry(l4, h3 >> 32, c)
 
+    var extra = c
+
+    if fe_mul_trace_enabled():
+        dbg_array_u64[5]("r (after main reduction)", InlineArray[UInt64,5](l0, l1, l2, l3, l4))
+
     # Now we have result in l0-l4, need to reduce to 4 limbs
-    while l4 > 0:
-        var top = l4
-        l4 = 0
+    while l4 > 0 or extra > 0:
+        var top: UInt64
+        if l4 > 0:
+            top = l4
+            l4 = 0
+        else:
+            top = extra
+            extra = 0
         c = 0
         lo, hi = mul64_128(top, 977)
         (l0, c) = add_carry(l0, lo, c)
@@ -240,11 +287,19 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
         (l2, c) = add_carry(l2, 0, c)
         (l3, c) = add_carry(l3, 0, c)
         (l4, c) = add_carry(l4, 0, c)
+        extra += c
+
+    if fe_mul_trace_enabled():
+        dbg_array_u64[5]("r (after folding)", InlineArray[UInt64,5](l0, l1, l2, l3, l4))
 
     var out = fe_from_limbs(InlineArray[UInt64,4](l0, l1, l2, l3))
     # Final reduction (at most 2 subtractions needed)
     out = reduce_once(out)
     out = reduce_once(out)
+
+    if fe_mul_trace_enabled():
+        dbg_array_u64[4]("final out.v", out.v)
+        print("--- fe_mul end ---")
     return out^
 
 @always_inline
