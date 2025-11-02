@@ -96,9 +96,12 @@ fn fe_p() -> Fe:
 # --- limb utils ---
 @always_inline
 fn add_carry(a: UInt64, b: UInt64, c: UInt64) -> Tuple[UInt64, UInt64]:
-    # returns (sum, carry)
-    var sum128 = UInt128(a) + UInt128(b) + UInt128(c)
-    return (UInt64(sum128 & MASK_U64), UInt64(sum128 >> 64))
+    # returns (sum, carry ∈ {0,1,2})
+    var s = a + b
+    var c1 = UInt64(s < a)
+    s = s + c
+    var c2 = UInt64(s < c)
+    return (s, c1 + c2)
 
 @always_inline
 fn sub_borrow(a: UInt64, b: UInt64, borrow: UInt64) -> Tuple[UInt64, UInt64]:
@@ -202,64 +205,95 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
     var t = InlineArray[UInt64,8](0,0,0,0,0,0,0,0)
     @parameter
     for i in range(4):
-        var carry: UInt128 = 0
+        var carry = UInt128(0)
         @parameter
         for j in range(4):
-            # Multiply two 64-bit limbs to get a 128-bit product
-            var prod = UInt128(a.v[i]) * UInt128(b.v[j])
-            # Add to the accumulator, including the carry from the previous step
-            var total = UInt128(t[i+j]) + (prod & MASK_U64) + carry
+            var lo: UInt64; var hi: UInt64
+            (lo, hi) = mul64_128(a.v[i], b.v[j])
+            var total = UInt128(t[i+j]) + UInt128(lo) + carry
             t[i+j] = UInt64(total & MASK_U64)
-            # The new carry is the high part of the product plus the carry from the addition
-            carry = (prod >> 64) + (total >> 64)
-        t[i+4] += UInt64(carry)
+            carry = (total >> 64) + UInt128(hi)
+
+        var idx = i + 4
+        while carry != UInt128(0):
+            if idx >= 8:
+                if carry != UInt128(0):
+                    raise Error("carry overflow in fe_mul")
+                break
+            var limb = UInt64(carry & MASK_U64)
+            var next_carry = carry >> 64
+            var sum: UInt64; var spill: UInt64
+            (sum, spill) = add_carry(t[idx], limb, UInt64(0))
+            t[idx] = sum
+            carry = next_carry + UInt128(spill)
+            idx += 1
 
     if fe_mul_trace_enabled():
         dbg_array_u64[8]("t (after schoolbook)", t)
 
-    # Modular reduction: 2^256 ≡ 2^32 + 977 (mod p)
-    # result = t_low + t_high * (2^32 + 977)
-    # Use UInt128 accumulators for clarity.
-    var r = InlineArray[UInt128, 5](
-        UInt128(t[0]), UInt128(t[1]), UInt128(t[2]), UInt128(t[3]), 0
-    )
+    # Extract low and high parts
+    var l0 = t[0]; var l1 = t[1]; var l2 = t[2]; var l3 = t[3]
+    var h0 = t[4]; var h1 = t[5]; var h2 = t[6]; var h3 = t[7]
 
-    # Fold high half (t[4..7]) into low half (r)
-    @parameter
-    for i in range(4):
-        var h = UInt128(t[i + 4])
-        # h * 977
-        r[i] += h * 977
-        # h << 32
-        r[i] += h << 32
-        r[i + 1] += h >> 32
+    # For secp256k1: 2^256 ≡ 2^32 + 977 (mod p)
+    # So result = l + h * (2^32 + 977)
 
-    # Propagate carries through r.
-    var reduction_carry: UInt128 = 0
-    @parameter
-    for i in range(5):
-        var s = r[i] + reduction_carry
-        r[i] = s & MASK_U64
-        reduction_carry = s >> 64
+    var c: UInt64 = 0
+    var lo, hi = mul64_128(h0, 977)
+    (l0, c) = add_carry(l0, lo, 0)
+    (l1, c) = add_carry(l1, hi, c)
+    lo, hi = mul64_128(h1, 977)
+    (l1, c) = add_carry(l1, lo, c)
+    (l2, c) = add_carry(l2, hi, c)
+    lo, hi = mul64_128(h2, 977)
+    (l2, c) = add_carry(l2, lo, c)
+    (l3, c) = add_carry(l3, hi, c)
+    lo, hi = mul64_128(h3, 977)
+    (l3, c) = add_carry(l3, lo, c)
+    var l4: UInt64 = 0
+    (l4, c) = add_carry(l4, hi, c)
 
-    # The top limb is now in `reduction_carry`. One final fold.
-    if reduction_carry > 0:
-        r[0] += reduction_carry * 977
-        r[0] += reduction_carry << 32
-        r[1] += reduction_carry >> 32
-        # Propagate one last time
-        var final_carry: UInt128 = 0
-        @parameter
-        for i in range(4):
-            var s = r[i] + final_carry
-            r[i] = s & MASK_U64
-            final_carry = s >> 64
-        # A carry here is astronomically unlikely
+    # Now add h << 32
+    c = 0
+    (l0, c) = add_carry(l0, h0 << 32, 0)
+    (l1, c) = add_carry(l1, h0 >> 32, c)
+    (l1, c) = add_carry(l1, h1 << 32, c)
+    (l2, c) = add_carry(l2, h1 >> 32, c)
+    (l2, c) = add_carry(l2, h2 << 32, c)
+    (l3, c) = add_carry(l3, h2 >> 32, c)
+    (l3, c) = add_carry(l3, h3 << 32, c)
+    (l4, c) = add_carry(l4, h3 >> 32, c)
 
-    var res_limbs = InlineArray[UInt64,4](
-        UInt64(r[0]), UInt64(r[1]), UInt64(r[2]), UInt64(r[3])
-    )
-    var out = fe_from_limbs(res_limbs)
+    var extra = c
+
+    if fe_mul_trace_enabled():
+        dbg_array_u64[5]("r (after main reduction)", InlineArray[UInt64,5](l0, l1, l2, l3, l4))
+
+    # Now we have result in l0-l4, need to reduce to 4 limbs
+    while l4 > 0 or extra > 0:
+        var top: UInt64
+        if l4 > 0:
+            top = l4
+            l4 = 0
+        else:
+            top = extra
+            extra = 0
+        c = 0
+        lo, hi = mul64_128(top, 977)
+        (l0, c) = add_carry(l0, lo, c)
+        (l1, c) = add_carry(l1, hi, c)
+        (l0, c) = add_carry(l0, top << 32, c)
+        (l1, c) = add_carry(l1, top >> 32, c)
+        (l2, c) = add_carry(l2, 0, c)
+        (l3, c) = add_carry(l3, 0, c)
+        (l4, c) = add_carry(l4, 0, c)
+        extra += c
+
+    if fe_mul_trace_enabled():
+        dbg_array_u64[5]("r (after folding)", InlineArray[UInt64,5](l0, l1, l2, l3, l4))
+
+    var out = fe_from_limbs(InlineArray[UInt64,4](l0, l1, l2, l3))
+    # Final reduction (at most 2 subtractions needed)
     out = reduce_once(out)
     out = reduce_once(out)
 

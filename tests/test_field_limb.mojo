@@ -1,4 +1,4 @@
-from secp256k1.field_limb import fe_from_limbs, fe_clone, fe_sub, fe_zero, fe_one, fe_sqr, fe_to_bytes32, fe_from_bytes32, fe_mul, add_carry, mul64_128, fe_p, fe_ge
+from secp256k1.field_limb import fe_from_limbs, fe_clone, fe_sub, fe_zero, fe_one, fe_sqr, fe_to_bytes32, fe_from_bytes32, fe_mul, add_carry, mul64_128, fe_p, fe_ge, Fe
 
 fn test_pm1_squared() raises:
     print("Test: (p-1)^2 == 1")
@@ -36,7 +36,6 @@ fn test_from_to_bytes() raises:
         if rt.v[i] != m1.v[i]:
             raise Error("FAIL: from/to bytes mismatch for -1")
     print("... OK")
-
 
 fn main() raises:
     test_pm1_squared()
