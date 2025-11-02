@@ -34,6 +34,10 @@ alias N1 = 0xBAAEDCE6AF48A03B
 alias N2 = 0xFFFFFFFFFFFFFFFE
 alias N3 = 0xFFFFFFFFFFFFFFFF
 alias N_INV = UInt64(0x4B0DFF665588B13F)
+alias N_MINUS_2_0 = UInt64(0xBFD25E8CD036413F)
+alias N_MINUS_2_1 = UInt64(0xBAAEDCE6AF48A03B)
+alias N_MINUS_2_2 = UInt64(0xFFFFFFFFFFFFFFFE)
+alias N_MINUS_2_3 = UInt64(0xFFFFFFFFFFFFFFFF)
 
 fn modulus_limbs() -> InlineArray[UInt64,4]:
     return InlineArray[UInt64,4](UInt64(N0), UInt64(N1), UInt64(N2), UInt64(N3))
@@ -222,6 +226,22 @@ fn to_mont(a: InlineArray[UInt64,4]) -> InlineArray[UInt64,4]:
 fn from_mont(a: InlineArray[UInt64,4]) -> InlineArray[UInt64,4]:
     return mont_mul(a, InlineArray[UInt64,4](1,0,0,0))
 
+fn sc_pow(base: InlineArray[UInt64,4], exp: InlineArray[UInt64,4]) -> InlineArray[UInt64,4]:
+    var base_m = to_mont(base)
+    var acc = to_mont(InlineArray[UInt64,4](1,0,0,0))
+    var limb = 3
+    while limb >= 0:
+        var word = exp[limb]
+        var bit = 0
+        while bit < 64:
+            acc = mont_mul(acc, acc)
+            var shift = UInt64(63 - bit)
+            if (word & (UInt64(1) << shift)) != UInt64(0):
+                acc = mont_mul(acc, base_m)
+            bit += 1
+        limb -= 1
+    return from_mont(acc)
+
 fn sc_zero() -> Sc:
     return sc_from_limbs(InlineArray[UInt64,4](0,0,0,0))
 
@@ -285,27 +305,15 @@ fn sc_mul_u64(a: Sc, c: UInt64) -> Sc:
 fn sc_inv(a: Sc) raises -> Sc:
     if sc_is_zero(a):
         raise Error("inverse does not exist for zero scalar")
-    var val = _sc_to_int(a)
-    var exp = CURVE_N - BigInt(2)
-    var inv = mod_pow(val, exp, CURVE_N)
-    return _sc_from_int(inv)
+    var exp = InlineArray[UInt64,4](N_MINUS_2_0, N_MINUS_2_1, N_MINUS_2_2, N_MINUS_2_3)
+    var limbs = sc_pow(a.v, exp)
+    return sc_from_limbs(limbs)
 
 fn _mod_positive(value: BigInt, modulus: BigInt) raises -> BigInt:
     var r = value.truncate_modulo(modulus)
     if r < BigInt(0):
         r = r + modulus
     return r
-
-fn mod_pow(base: BigInt, exp: BigInt, modulus: BigInt) raises -> BigInt:
-    var res = BigInt(1)
-    var b = base
-    var e = exp
-    while e > BigInt(0):
-        if e % BigInt(2) == BigInt(1):
-            res = _mod_positive(res * b, modulus)
-        b = _mod_positive(b * b, modulus)
-        e = e // BigInt(2)
-    return res
 
 fn _sc_from_int(value: BigInt) raises -> Sc:
     var r = _mod_positive(value, CURVE_N)
