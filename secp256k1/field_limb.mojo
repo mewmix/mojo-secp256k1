@@ -96,12 +96,8 @@ fn fe_p() -> Fe:
 # --- limb utils ---
 @always_inline
 fn add_carry(a: UInt64, b: UInt64, c: UInt64) -> Tuple[UInt64, UInt64]:
-    # returns (sum, carry ∈ {0,1,2})
-    var s = a + b
-    var c1 = UInt64(s < a)
-    s = s + c
-    var c2 = UInt64(s < c)
-    return (s, c1 + c2)
+    var sum128 = UInt128(a) + UInt128(b) + UInt128(c)
+    return (UInt64(sum128 & MASK_U64), UInt64(sum128 >> 64))
 
 @always_inline
 fn sub_borrow(a: UInt64, b: UInt64, borrow: UInt64) -> Tuple[UInt64, UInt64]:
@@ -305,6 +301,58 @@ fn fe_mul(a: Fe, b: Fe) raises -> Fe:
 @always_inline
 fn fe_sqr(a: Fe) raises -> Fe:
     return fe_mul(a, a)
+
+fn fe_mul_scalar(a: Fe, k: UInt64) -> Fe:
+    var t = InlineArray[UInt64, 8](0,0,0,0,0,0,0,0)
+    var carry: UInt128 = 0
+    @parameter
+    for i in range(4):
+        var prod = UInt128(a.v[i]) * UInt128(k) + carry
+        t[i] = UInt64(prod & MASK_U64)
+        carry = prod >> 64
+    t[4] = UInt64(carry)
+
+    var r = InlineArray[UInt128, 5](
+        UInt128(t[0]), UInt128(t[1]), UInt128(t[2]), UInt128(t[3]), 0
+    )
+
+    @parameter
+    for i in range(4):
+        var h = UInt128(t[i + 4])
+        r[i] += h * 977
+        r[i] += h << 32
+        r[i+1] += h >> 32
+
+    var r_carry: UInt128 = 0
+    @parameter
+    for i in range(5):
+        var s = r[i] + r_carry
+        r[i] = s & MASK_U64
+        r_carry = s >> 64
+
+    if r_carry > 0:
+        r[0] += r_carry * 977
+        r[0] += r_carry << 32
+        r[1] += r_carry >> 32
+
+        var final_carry: UInt128 = 0
+        @parameter
+        for i in range(4):
+            var s = r[i] + final_carry
+            r[i] = s & MASK_U64
+            final_carry = s >> 64
+
+    var res_limbs = InlineArray[UInt64,4](
+        UInt64(r[0]), UInt64(r[1]), UInt64(r[2]), UInt64(r[3])
+    )
+    var out = fe_from_limbs(res_limbs)
+    out = reduce_once(out)
+    out = reduce_once(out)
+    return out^
+
+@always_inline
+fn fe_double(a: Fe) -> Fe:
+    return fe_mul_scalar(a, 2)
 
 # --- exponentiation by square-and-multiply for inversion (a^(p-2)) ---
 fn fe_pow(a: Fe, exp_be: InlineArray[UInt64,4]) raises -> Fe:
