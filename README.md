@@ -39,6 +39,14 @@ Run the project's test suite via Pixi:
 ```bash
 pixi run test
 ```
+
+## Benchmarks
+
+Compare the Mojo ECDSA implementation with Python (`eth-keys`) and OpenSSL (`cryptography`) bindings:
+
+```bash
+pixi run bench-ecdsa
+```
 ## Notes
 
 - When running Mojo directly, include the necessary paths. Example includes: `-I decimojo/src -I keccak`.

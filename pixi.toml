@@ -14,6 +14,7 @@ mojo = "*"
 eth-keys = "*"
 eth-hash = {version = "*", extras = ["pycryptodome"]}
 pycryptodome = "*"
+cryptography = "*"
 
 # Main test tasks that run everything
 [tasks.test]
@@ -48,3 +49,6 @@ cmd = ".pixi/envs/default/bin/python python_tests/kat_and_benchmark.py"
 
 [tasks.verify-all]
 cmd = ".pixi/envs/default/bin/python python_tests/verify_signatures.py"
+
+[tasks.bench-ecdsa]
+cmd = ".pixi/envs/default/bin/python python_tests/benchmark_ecdsa.py"
