@@ -6,11 +6,12 @@ from secp256k1.fe import (
     fe_normalize_strong, _fe_from_int, _fe_to_int, FIELD_P
 )
 from secp256k1.sc import (
-    Sc, sc_zero, sc_from_bytes32, sc_to_bytes32, sc_add, sc_mul, 
-    sc_mul_u64, sc_neg, sc_sub, sc_inv, _sc_from_int, _sc_to_int, CURVE_N
+    Sc, sc_zero, sc_from_bytes32, sc_to_bytes32, sc_add, sc_mul,
+    sc_mul_u64, sc_neg, sc_sub, sc_inv, _sc_from_int, _sc_to_int,
+    sc_modulus_bytes32
 )
 from secp256k1.sign import (
-    ecdsa_sign_keccak, eth_personal_hash, bytes_to_int_be, int_to_bytes32_be
+    CURVE_N, ecdsa_sign_keccak, eth_personal_hash, bytes_to_int_be, int_to_bytes32_be
 )
 
 
@@ -142,7 +143,9 @@ fn test_scalar_modular() raises:
     print("Testing scalar modular arithmetic...")
     
     # Test modular reduction
-    var large = _sc_from_int(CURVE_N + 456)
+    var curve_n_big = bytes_to_int_be(sc_modulus_bytes32())
+    var large_bytes = int_to_bytes32_be(curve_n_big + BigInt(456))
+    var large = sc_from_bytes32(large_bytes)
     assert_true(_sc_to_int(large) == 456, "Should reduce mod n")
     
     # Test inverse
