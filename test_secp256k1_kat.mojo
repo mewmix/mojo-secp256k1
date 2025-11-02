@@ -2,7 +2,6 @@
 
 from keccak.keccak import to_hex32
 from secp256k1.sign import ecdsa_sign_keccak, bytes_to_int_be
-from secp256k1.sc import CURVE_N
 
 fn test_ecdsa_kat() raises:
     print("Testing ECDSA signing with KAT vector...")

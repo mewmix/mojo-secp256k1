@@ -1,32 +1,6 @@
 """secp256k1 scalar arithmetic modulo n using 4×64-bit Montgomery arithmetic."""
 
 from collections.inline_array import InlineArray
-from decimojo import BigInt
-from decimojo.bigint.bigint import BigUInt
-
-
-fn make_bigint(var words: List[UInt32]) -> BigInt:
-    var magnitude = BigUInt()
-    magnitude.words = words^
-    var out = BigInt()
-    out.magnitude = magnitude
-    out.sign = False
-    return out
-
-
-alias CURVE_N = make_bigint(
-    List[UInt32](
-        UInt32(161494337),
-        UInt32(163141518),
-        UInt32(904382605),
-        UInt32(564279074),
-        UInt32(907852837),
-        UInt32(985008687),
-        UInt32(195423570),
-        UInt32(89237316),
-        UInt32(115792),
-    )
-)
 
 alias MASK_U64 = UInt128(0xFFFFFFFFFFFFFFFF)
 alias N0 = 0xBFD25E8CD0364141
@@ -38,8 +12,9 @@ alias N_MINUS_2_0 = UInt64(0xBFD25E8CD036413F)
 alias N_MINUS_2_1 = UInt64(0xBAAEDCE6AF48A03B)
 alias N_MINUS_2_2 = UInt64(0xFFFFFFFFFFFFFFFE)
 alias N_MINUS_2_3 = UInt64(0xFFFFFFFFFFFFFFFF)
+alias INT64_MAX = UInt64(0x7FFFFFFFFFFFFFFF)
 
-fn modulus_limbs() -> InlineArray[UInt64,4]:
+fn sc_modulus_limbs() -> InlineArray[UInt64,4]:
     return InlineArray[UInt64,4](UInt64(N0), UInt64(N1), UInt64(N2), UInt64(N3))
 
 fn rr_limbs() -> InlineArray[UInt64,4]:
@@ -121,7 +96,7 @@ fn sc_sub_raw(a: InlineArray[UInt64,4], b: InlineArray[UInt64,4]) -> InlineArray
         (diff[i], borrow) = sub_borrow(a[i], b[i], borrow)
     var addback = InlineArray[UInt64,4](0,0,0,0)
     var carry: UInt64 = 0
-    var n = modulus_limbs()
+    var n = sc_modulus_limbs()
     @parameter
     for i in range(4):
         (addback[i], carry) = add_carry(diff[i], n[i], carry)
@@ -134,7 +109,7 @@ fn sc_add_raw(a: InlineArray[UInt64,4], b: InlineArray[UInt64,4]) -> InlineArray
     @parameter
     for i in range(4):
         (sum[i], carry) = add_carry(a[i], b[i], carry)
-    var n = modulus_limbs()
+    var n = sc_modulus_limbs()
     var tmp = InlineArray[UInt64,4](0,0,0,0)
     var borrow: UInt64 = 0
     @parameter
@@ -147,7 +122,7 @@ fn sc_add_raw(a: InlineArray[UInt64,4], b: InlineArray[UInt64,4]) -> InlineArray
     return sc_select(mask, tmp, sum)
 
 fn sc_reduce_once(a: InlineArray[UInt64,4]) -> InlineArray[UInt64,4]:
-    return sc_sub_raw(a, modulus_limbs())
+    return sc_sub_raw(a, sc_modulus_limbs())
 
 fn mont_reduce(t_in: InlineArray[UInt64,8]) -> InlineArray[UInt64,4]:
     var t = InlineArray[UInt64,9](
@@ -155,7 +130,7 @@ fn mont_reduce(t_in: InlineArray[UInt64,8]) -> InlineArray[UInt64,4]:
         t_in[4], t_in[5], t_in[6], t_in[7],
         UInt64(0),
     )
-    var n = modulus_limbs()
+    var n = sc_modulus_limbs()
     var i = 0
     while i < 4:
         var m = UInt64((UInt128(t[i]) * UInt128(N_INV)) & MASK_U64)
@@ -281,7 +256,7 @@ fn sc_neg(a: Sc) -> Sc:
         return sc_zero()
     var res = InlineArray[UInt64,4](0,0,0,0)
     var borrow: UInt64 = 0
-    var n = modulus_limbs()
+    var n = sc_modulus_limbs()
     @parameter
     for i in range(4):
         (res[i], borrow) = sub_borrow(n[i], a.v[i], borrow)
@@ -309,26 +284,30 @@ fn sc_inv(a: Sc) raises -> Sc:
     var limbs = sc_pow(a.v, exp)
     return sc_from_limbs(limbs)
 
-fn _mod_positive(value: BigInt, modulus: BigInt) raises -> BigInt:
-    var r = value.truncate_modulo(modulus)
-    if r < BigInt(0):
-        r = r + modulus
-    return r
+fn sc_from_u64(value: UInt64) -> Sc:
+    var limbs = InlineArray[UInt64,4](value, 0, 0, 0)
+    return sc_from_limbs(limbs)
 
-fn _sc_from_int(value: BigInt) raises -> Sc:
-    var r = _mod_positive(value, CURVE_N)
-    var bytes = [0] * 32
-    var idx = 31
-    while idx >= 0:
-        var byte = r % BigInt(256)
-        bytes[idx] = Int(byte)
-        r = r // BigInt(256)
-        idx -= 1
-    return sc_from_bytes32(bytes)
+fn _sc_from_int(value: Int) raises -> Sc:
+    if value < 0:
+        raise Error("_sc_from_int expects a non-negative value")
+    var limbs = InlineArray[UInt64,4](UInt64(value), 0, 0, 0)
+    return sc_from_limbs(limbs)
 
-fn _sc_to_int(x: Sc) -> BigInt:
-    var bytes = sc_to_bytes32(x)
-    var res = BigInt(0)
-    for b in bytes:
-        res = res * BigInt(256) + BigInt(b & 0xFF)
-    return res
+fn _sc_to_int(x: Sc) raises -> Int:
+    if x.v[1] != UInt64(0) or x.v[2] != UInt64(0) or x.v[3] != UInt64(0):
+        raise Error("scalar value does not fit in Int")
+    if x.v[0] > INT64_MAX:
+        raise Error("scalar value exceeds Int range")
+    return Int(x.v[0])
+
+fn sc_modulus_bytes32() -> List[Int]:
+    var n = sc_modulus_limbs()
+    var out = [0] * 32
+    @parameter
+    for k in range(4):
+        var limb = n[k]
+        @parameter
+        for j in range(8):
+            out[31 - (k * 8 + j)] = Int((limb >> UInt64(j * 8)) & UInt64(0xFF))
+    return out.copy()
