@@ -1,97 +1,62 @@
+from secp256k1.field_limb import Fe, fe_from_limbs, fe_mul
+from sys import argv
 from collections.inline_array import InlineArray
-from decimojo import BigInt
-from secp256k1.field_limb import Fe, fe_from_bytes32, fe_to_bytes32, fe_mul, fe_one, fe_zero, fe_p
 
-# Oracle function using BigInt
-fn mul_oracle(a: Fe, b: Fe) raises -> Fe:
-    # 1. Convert Fe to byte arrays
-    var a_bytes = fe_to_bytes32(a)
-    var b_bytes = fe_to_bytes32(b)
+fn hex_char_to_u4(c: UInt8) -> UInt8:
+    if c >= ord('0') and c <= ord('9'):
+        return c - ord('0')
+    if c >= ord('a') and c <= ord('f'):
+        return c - ord('a') + 10
+    if c >= ord('A') and c <= ord('F'):
+        return c - ord('A') + 10
+    return 255 # error indicator
 
-    # 2. Convert byte arrays to hex strings
-    var a_hex = "0x"
-    for i in range(len(a_bytes)):
-        a_hex += hex(a_bytes[i])
-    var b_hex = "0x"
-    for i in range(len(b_bytes)):
-        b_hex += hex(b_bytes[i])
+fn fe_from_hex(hex_str: String) -> Fe:
+    # Expects "0x" + 64 hex chars
+    var limbs = InlineArray[UInt64, 4](0, 0, 0, 0)
+    var str_len = len(hex_str)
+    if str_len != 66:
+        print("Error: fe_from_hex expects '0x' + 64 hex chars")
+        return fe_from_limbs(limbs)
 
-    # 3. Create BigInts from hex strings
-    var a_bi = BigInt(a_hex)
-    var b_bi = BigInt(b_hex)
-    var p_bi = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
+    var bytes_str = hex_str.as_bytes()
+    @parameter
+    for i in range(4): # 4 limbs
+        var current_limb: UInt64 = 0
+        @parameter
+        for j in range(16): # 16 hex chars per limb
+            var char_idx = str_len - 1 - (i * 16 + j)
+            var u4_val = hex_char_to_u4(bytes_str[char_idx])
+            current_limb |= UInt64(u4_val) << UInt64(j * 4)
+        limbs[i] = current_limb
+    return fe_from_limbs(limbs)
 
-    # 4. Perform multiplication and modular reduction
-    var c_bi = (a_bi * b_bi) % p_bi
-
-    # 5. Convert result back to hex string
-    var c_hex = c_bi.to_string()
-
-    # 6. Convert hex string to byte array
-    var c_bytes = List[Int]()
-    # a bit hacky, but should work for now
-    var c_hex_no_prefix = c_hex[2:]
-    for i in range(0, len(c_hex_no_prefix), 2):
-        c_bytes.append(Int(c_hex_no_prefix[i:i+2], 16))
-
-    # 7. Convert byte array back to Fe
-    return fe_from_bytes32(c_bytes)
-
-# Cheap deterministic pseudo-random 26-bit (LCG)
-struct Rng(Movable):
-    var s: UInt64
-
-    fn __init__(self, seed: UInt64) -> Self:
-        var new_self = self
-        new_self.s = seed
-        return new_self
-
-    fn next64(self) -> Tuple[Self, UInt64]:
-        # xorshift64*
-        var new_self = self
-        var x = new_self.s
-        x ^= x << 13; x ^= x >> 7; x ^= x << 17
-        new_self.s = x
-        return new_self, x
-
-    fn next_fe(self) raises -> Tuple[Self, Fe]:
-        var new_self = self
-        var b = [0]*32
-        var w0: UInt64; (new_self, w0) = new_self.next64()
-        var w1: UInt64; (new_self, w1) = new_self.next64()
-        var w2: UInt64; (new_self, w2) = new_self.next64()
-        var w3: UInt64; (new_self, w3) = new_self.next64()
-        # big-endian bytes for fe_from_bytes32
-        var i = 0
-        while i < 8:
-            b[31-i] = Int((w0 >> UInt64(i*8)) & UInt64(0xFF))
-            b[23-i] = Int((w1 >> UInt64(i*8)) & UInt64(0xFF))
-            b[15-i] = Int((w2 >> UInt64(i*8)) & UInt64(0xFF))
-            b[7 -i] = Int((w3 >> UInt64(i*8)) & UInt64(0xFF))
-            i += 1
-        return new_self, fe_from_bytes32(b)
-
-fn print_fe(label: String, a: Fe):
-    print(label)
-    print("  v0..v3 LE:",
-          a.v[0], a.v[1], a.v[2], a.v[3])
+fn fe_to_hex(f: Fe) -> String:
+    var s = "0x"
+    @parameter
+    for i in range(4):
+        var limb_idx = 3 - i
+        var limb = f.v[limb_idx]
+        var part = ""
+        @parameter
+        for j in range(16):
+            var char_idx = 15 - j
+            var u4 = (limb >> UInt64(char_idx * 4)) & 0xF
+            if u4 < 10:
+                part += chr(ord('0') + Int(u4))
+            else:
+                part += chr(ord('a') + Int(u4) - 10)
+        s += part
+    return s
 
 fn main() raises:
-    var rng = Rng(0x12345678ABCDEF01)
-    var i = 0
-    while i < 200000:    # increase as needed
-        var a: Fe; (rng, a) = rng.next_fe()
-        var b: Fe; (rng, b) = rng.next_fe()
+    var args = argv()
+    if len(args) != 3:
+        print("Usage: mojo fuzz_mul.mojo <hex_a> <hex_b>")
+        return
 
-        var c_ref = mul_oracle(a, b)
-        var c_dut = fe_mul(a, b)
-
-        if c_ref.v[0] != c_dut.v[0] or c_ref.v[1] != c_dut.v[1] or c_ref.v[2] != c_dut.v[2] or c_ref.v[3] != c_dut.v[3]:
-            print("FAIL@i=", i)
-            print_fe("A", a)
-            print_fe("B", b)
-            print_fe("REF", c_ref)
-            print_fe("DUT", c_dut)
-            raise Error("fuzzer mismatch")
-        i += 1
-    print("OK")
+    var a = fe_from_hex(args[1])
+    var b = fe_from_hex(args[2])
+    var c = fe_mul(a, b)
+    var c_hex = fe_to_hex(c)
+    print("mojo_res_limbs=" + c_hex)
