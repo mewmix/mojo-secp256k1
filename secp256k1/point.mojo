@@ -1,6 +1,21 @@
-from collections.inline_array import InlineArray
-from .fe import Fe, fe_zero, fe_one, fe_neg, fe_copy, fe_add, fe_sub, fe_mul, fe_sqr, fe_inv, fe_from_bytes, G_X, G_Y, fe_is_zero, fe_equal, fe_from_u64, _fe_to_int, _fe_from_int, FIELD_P
-from decimojo import BigInt
+from .fe import (
+    Fe,
+    fe_zero,
+    fe_one,
+    fe_neg,
+    fe_copy,
+    fe_add,
+    fe_sub,
+    fe_mul,
+    fe_sqr,
+    fe_inv,
+    fe_from_bytes,
+    G_X,
+    G_Y,
+    fe_is_zero,
+    fe_equal,
+    fe_from_u64,
+)
 
 struct Affine(Movable):
     var x: Fe

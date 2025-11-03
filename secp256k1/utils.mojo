@@ -1,6 +1,4 @@
-from collections.inline_array import InlineArray
 from .fe import Fe
-from .point import Point
 
 @always_inline
 fn ct_mask64(c: UInt64) -> UInt64:
@@ -14,5 +12,5 @@ fn ct_cmov_u64(a: UInt64, b: UInt64, c: UInt64) -> UInt64:
 fn fe_cmov(out r: Fe, a: Fe, b: Fe, c: UInt64):
     var i = 0
     while i < 4:
-        r.value[i] = ct_cmov_u64(a.value[i], b.value[i], c)
+        r.v[i] = ct_cmov_u64(a.v[i], b.v[i], c)
         i += 1

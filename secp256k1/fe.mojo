@@ -1,145 +1,100 @@
-"""secp256k1 field arithmetic backed by DeciMojo BigInt."""
-
-from decimojo import BigInt
-from decimojo.bigint.bigint import BigUInt
-
-
-fn make_bigint(var words: List[UInt32]) -> BigInt:
-    var magnitude = BigUInt()
-    magnitude.words = words^
-    var out = BigInt()
-    out.magnitude = magnitude
-    out.sign = False
-    return out
-
-
-alias FIELD_P = make_bigint(
-    List[UInt32](
-        UInt32(834671663),
-        UInt32(584007908),
-        UInt32(564039457),
-        UInt32(984665640),
-        UInt32(907853269),
-        UInt32(985008687),
-        UInt32(195423570),
-        UInt32(89237316),
-        UInt32(115792),
-    )
+from collections.inline_array import InlineArray
+from .field_limb import (
+    Fe,
+    fe_clone,
+    fe_zero as limb_fe_zero,
+    fe_one as limb_fe_one,
+    fe_add as limb_fe_add,
+    fe_sub as limb_fe_sub,
+    fe_neg as limb_fe_neg,
+    fe_mul as limb_fe_mul,
+    fe_sqr as limb_fe_sqr,
+    fe_inv as limb_fe_inv,
+    fe_from_limbs,
+    fe_from_bytes32 as limb_fe_from_bytes32,
+    fe_to_bytes32 as limb_fe_to_bytes32,
+    fe_normalize_strong as limb_fe_normalize_strong,
 )
 
-
-fn _mod_positive(value: BigInt, modulus: BigInt) raises -> BigInt:
-    var r = value.truncate_modulo(modulus)
-    if r < BigInt(0):
-        r = r + modulus
-    return r
-
-
-fn mod_pow(base: BigInt, exp: BigInt, modulus: BigInt) raises -> BigInt:
-    var res = BigInt(1)
-    var b = base
-    var e = exp
-    while e > BigInt(0):
-        if e % BigInt(2) == BigInt(1):
-            res = _mod_positive(res * b, modulus)
-        b = _mod_positive(b * b, modulus)
-        e = e // BigInt(2)
-    return res
-
-
-struct Fe(Movable):
-    var value: BigInt
-
-    fn __init__(out self):
-        self.value = BigInt()
-
+alias INT64_MAX = UInt64(0x7FFFFFFFFFFFFFFF)
 
 @always_inline
-fn _fe_from_int(value: BigInt) raises -> Fe:
-    var r = Fe()
-    r.value = _mod_positive(value, FIELD_P)
-    return r^
-
+fn fe_zero() -> Fe:
+    return limb_fe_zero()
 
 @always_inline
-fn _fe_to_int(a: Fe) -> BigInt:
-    return a.value
+fn fe_one() -> Fe:
+    return limb_fe_one()
 
-
-fn fe_zero() raises -> Fe:
-    return _fe_from_int(BigInt(0))
-
-
-fn fe_one() raises -> Fe:
-    return _fe_from_int(BigInt(1))
-
-
+@always_inline
 fn fe_copy(a: Fe) -> Fe:
-    var r = Fe()
-    r.value = a.value
-    return r^
+    return fe_clone(a)
 
+@always_inline
+fn fe_add(a: Fe, b: Fe) -> Fe:
+    return limb_fe_add(a, b)
 
-fn fe_add(a: Fe, b: Fe) raises -> Fe:
-    return _fe_from_int(a.value + b.value)
+@always_inline
+fn fe_sub(a: Fe, b: Fe) -> Fe:
+    return limb_fe_sub(a, b)
 
-
-fn fe_sub(a: Fe, b: Fe) raises -> Fe:
-    return _fe_from_int(a.value - b.value)
-
-
-fn fe_neg(a: Fe) raises -> Fe:
-    if a.value.is_zero():
-        return fe_zero()
-    return _fe_from_int(FIELD_P - a.value)
-
+@always_inline
+fn fe_neg(a: Fe) -> Fe:
+    return limb_fe_neg(a)
 
 fn fe_mul(a: Fe, b: Fe) raises -> Fe:
-    return _fe_from_int(a.value * b.value)
-
+    return limb_fe_mul(a, b)
 
 fn fe_sqr(a: Fe) raises -> Fe:
-    return fe_mul(a, a)
-
+    return limb_fe_sqr(a)
 
 fn fe_inv(a: Fe) raises -> Fe:
-    var val = _mod_positive(a.value, FIELD_P)
-    if val.is_zero():
-        raise Error("inverse does not exist for zero field element")
-    
-    var exp = FIELD_P - BigInt(2)
-    var inv = mod_pow(val, exp, FIELD_P)
-    return _fe_from_int(inv)
-
+    return limb_fe_inv(a)
 
 fn fe_normalize_strong(mut a: Fe) raises:
-    a.value = _mod_positive(a.value, FIELD_P)
+    var normalized = limb_fe_normalize_strong(a)
+    a.v = normalized.v
 
+@always_inline
 fn fe_is_zero(a: Fe) -> Bool:
-    return a.value.is_zero()
+    return a.v[0] == 0 and a.v[1] == 0 and a.v[2] == 0 and a.v[3] == 0
 
+@always_inline
 fn fe_equal(a: Fe, b: Fe) -> Bool:
-    return a.value == b.value
+    return (
+        a.v[0] == b.v[0]
+        and a.v[1] == b.v[1]
+        and a.v[2] == b.v[2]
+        and a.v[3] == b.v[3]
+    )
 
-fn fe_from_u64(val: UInt64) raises -> Fe:
-    return _fe_from_int(BigInt(val))
+@always_inline
+fn fe_from_u64(val: UInt64) -> Fe:
+    return fe_from_limbs(InlineArray[UInt64,4](val, 0, 0, 0))
+
+fn _fe_from_int(value: Int) raises -> Fe:
+    if value < 0:
+        raise Error("_fe_from_int expects a non-negative value")
+    return fe_from_u64(UInt64(value))
+
+fn _fe_to_int(a: Fe) raises -> Int:
+    if a.v[1] != UInt64(0) or a.v[2] != UInt64(0) or a.v[3] != UInt64(0):
+        raise Error("field element does not fit in Int")
+    if a.v[0] > INT64_MAX:
+        raise Error("field element exceeds Int range")
+    return Int(a.v[0])
 
 fn fe_from_bytes(bytes: List[Int]) raises -> Fe:
-    var acc = BigInt(0)
-    for b in bytes:
-        acc = acc * BigInt(256) + BigInt(b & 0xFF)
-    return _fe_from_int(acc)
+    if len(bytes) != 32:
+        raise Error("fe_from_bytes expects 32 bytes")
+    return limb_fe_from_bytes32(bytes)
 
-fn fe_to_bytes(a: Fe) raises -> List[Int]:
-    var val = _fe_to_int(a)
-    var out = [0] * 32
-    for i in range(31, -1, -1):
-        out[i] = Int(val & 0xFF)
-        val = val >> 8
-    return out.copy()
+fn fe_to_bytes(a: Fe) -> List[Int]:
+    return limb_fe_to_bytes32(a)
 
+@always_inline
 fn fe_is_odd(a: Fe) -> Bool:
-    return _fe_to_int(a) & 1 == 1
+    return (a.v[0] & UInt64(1)) == UInt64(1)
 
 alias G_X = [
     0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC, 0x55, 0xA0, 0x62, 0x95,
@@ -148,7 +103,7 @@ alias G_X = [
 ]
 
 alias G_Y = [
-    0x48, 0x3A, 0xDA, 0x77, 0x26, 0xA3, 0xC4, 0x65, 0x5D, 0x4, 0xFB, 0xFC,
+    0x48, 0x3A, 0xDA, 0x77, 0x26, 0xA3, 0xC4, 0x65, 0x5D, 0x04, 0xFB, 0xFC,
     0x0E, 0x11, 0x08, 0xA8, 0xFD, 0x17, 0xB4, 0x48, 0xA6, 0x85, 0x54, 0x19,
     0x9C, 0x47, 0xD0, 0x8F, 0xFB, 0x10, 0xD4, 0xB8
 ]
