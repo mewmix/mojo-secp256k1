@@ -10,7 +10,7 @@ fn to_bytes(msg: String) -> List[Int]:
     for cp in msg.codepoints():
         out[idx] = Int(cp) & 0xFF
         idx += 1
-    return out.copy()
+    return out^
 
 fn get_iterations(default_iters: Int) raises -> Int:
     var os = Python.import_module("os")
@@ -50,9 +50,9 @@ fn main() raises:
     var sign_avg = Float64(sign_total) / Float64(iterations)
     var sign_per_sec = 1_000_000_000.0 / sign_avg
 
+    var v = sig.v
     var r_bytes = sig.r.copy()
     var s_bytes = sig.s.copy()
-    var v = sig.v
 
     start = perf_counter_ns()
     i = 0

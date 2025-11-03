@@ -101,10 +101,9 @@ def bench_eth_keys(iterations: int) -> BenchResult:
     sign_ns = (time.perf_counter_ns() - start) / iterations
 
     signature = private_key.sign_msg_hash(message_hash)
-    sig_obj = keys.Signature(signature.to_bytes())
     start = time.perf_counter_ns()
     for _ in range(iterations):
-        sig_obj.recover_public_key_from_msg_hash(message_hash)
+        signature.recover_public_key_from_msg_hash(message_hash)
     recover_ns = (time.perf_counter_ns() - start) / iterations
 
     return BenchResult("eth-keys (Python)", sign_ns, recover_ns)
@@ -115,17 +114,18 @@ def bench_cryptography(iterations: int) -> BenchResult:
     message = b"benchmark message"
     digest = keccak(message)
     algorithm = Prehashed(hashes.SHA256())
+    ecdsa_algorithm = ec.ECDSA(algorithm)
 
     start = time.perf_counter_ns()
     for _ in range(iterations):
-        private_key.sign(digest, ec.ECDSA(algorithm))
+        private_key.sign(digest, ecdsa_algorithm)
     sign_ns = (time.perf_counter_ns() - start) / iterations
 
-    signature = private_key.sign(digest, ec.ECDSA(algorithm))
+    signature = private_key.sign(digest, ecdsa_algorithm)
     public_key = private_key.public_key()
     start = time.perf_counter_ns()
     for _ in range(iterations):
-        public_key.verify(signature, digest, ec.ECDSA(algorithm))
+        public_key.verify(signature, digest, ecdsa_algorithm)
     recover_ns = (time.perf_counter_ns() - start) / iterations
 
     return BenchResult("cryptography (OpenSSL)", sign_ns, recover_ns)
