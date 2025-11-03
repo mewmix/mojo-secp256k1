@@ -1,7 +1,19 @@
 from collections.inline_array import InlineArray
 from .fe import Fe, fe_zero, fe_one, fe_neg
 from .sc import Sc, sc_is_zero, sc_is_odd, sc_shr1, sc_add_u64, sc_sub, sc_from_u64
-from .point import Affine, Jacobian, generator_affine, affine_to_jacobian, jacobian_to_affine, jacobian_double, jacobian_add, jacobian_mixed_add, point_infinity_jac
+from .point import (
+    Affine,
+    Jacobian,
+    generator_affine,
+    affine_to_jacobian,
+    jacobian_to_affine,
+    jacobian_double,
+    jacobian_double_inplace,
+    jacobian_add,
+    jacobian_mixed_add,
+    jacobian_mixed_add_inplace,
+    point_infinity_jac,
+)
 from .utils import fe_cmov, ct_cmov_u64
 
 alias W = 12
@@ -64,7 +76,7 @@ fn kG_wnaf(out R: Jacobian, k: Sc) raises:
     R = point_infinity_jac()
     var i = n - 1
     while i >= 0:
-        R = jacobian_double(R)
+        jacobian_double_inplace(R)
         let d = digits[i]
         let neg = (d < 0)
         let ad = Int( (d < 0) ? -d : d )
@@ -72,5 +84,5 @@ fn kG_wnaf(out R: Jacobian, k: Sc) raises:
             var P: Affine
             tbl_select_abs(P, ad)
             if neg: P.y = fe_neg(P.y)
-            R = jacobian_mixed_add(R, P)
+            jacobian_mixed_add_inplace(R, P)
         i -= 1

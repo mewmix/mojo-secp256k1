@@ -1,0 +1,9 @@
+{
+  "command": "pixi run mojo --optimization-level=3 -I . -I decimojo/src -I keccak bench_ecdsa.mojo",
+  "timestamp_utc": "2025-11-03T04:34:13Z",
+  "mojo.iterations": 50,
+  "mojo.sign_ns_per_iter": 12856750.24,
+  "mojo.sign_ops_per_sec": 77.78015294166592,
+  "mojo.recover_ns_per_iter": 38934470.52,
+  "mojo.recover_ops_per_sec": 25.68418130885628
+}
