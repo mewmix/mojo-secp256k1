@@ -13,6 +13,7 @@ mojo = "*"
 [pypi-dependencies]
 eth-keys = "*"
 eth-hash = {version = "*", extras = ["pycryptodome"]}
+rlp = "*"
 pycryptodome = "*"
 cryptography = "*"
 rlp = "*"
@@ -49,7 +50,6 @@ cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak tests/test_eip1559.mojo | .
 
 [tasks.verify-legacy]
 cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak tests/test_legacy.mojo | .pixi/envs/default/bin/python python_tests/verify_legacy.py"'
-
 [tasks.verify-eip2930]
 cmd = 'bash -lc "mojo -I . -I decimojo/src -I keccak tests/test_eip2930.mojo | .pixi/envs/default/bin/python python_tests/verify_eip2930.py"'
 
