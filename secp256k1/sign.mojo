@@ -371,6 +371,18 @@ fn int_to_bytes32_be(value: BigInt) raises -> List[Int]:
     return out.copy()
 
 
+fn int_to_bytes(value: BigInt) raises -> List[Int]:
+    if value == 0:
+        return [0].copy()
+    var v = value
+    var out = List[Int]()
+    while v > 0:
+        out.append(Int(v % 256))
+        v = v // 256
+    out.reverse()
+    return out.copy()
+
+
 fn eth_personal_hash(msg: List[Int]) -> List[Int]:
     var prefix = "\x19Ethereum Signed Message:\n" + String(len(msg))
     var data = [0] * (len(prefix) + len(msg))
