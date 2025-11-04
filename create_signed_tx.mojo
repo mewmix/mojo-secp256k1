@@ -92,6 +92,7 @@ fn main() raises:
     var sig = ecdsa_sign_keccak(msg32, sk)
 
     # RLP encode the signed transaction
+    var eip155_v = BigInt((sig.v - 27) + chain_id * 2 + 35)
     var signed_tx = List[List[Int]](
         int_to_bytes(nonce),
         int_to_bytes(gas_price),
@@ -99,7 +100,7 @@ fn main() raises:
         to.copy(),
         int_to_bytes(value),
         data.copy(),
-        int_to_bytes(BigInt(sig.v + chain_id * 2 + 35)),
+        int_to_bytes(eip155_v),
         sig.r.copy(),
         sig.s.copy(),
     )
