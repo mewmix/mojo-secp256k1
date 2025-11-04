@@ -23,13 +23,10 @@ struct Rfc6979Sha256(Movable):
 
     fn _update(mut self, prefix: Int):
         var data = List[Int]()
-        for value in self.V:
-            data.append(value & 0xFF)
-        data.append(prefix & 0xFF)
-        for value in self.seckey:
-            data.append(value & 0xFF)
-        for value in self.message:
-            data.append(value & 0xFF)
+        data.extend(self.V.copy())
+        data.append(prefix)
+        data.extend(self.seckey.copy())
+        data.extend(self.message.copy())
 
         self.K = sha256_hmac(self.K, data)
         self.V = sha256_hmac(self.K, self.V)

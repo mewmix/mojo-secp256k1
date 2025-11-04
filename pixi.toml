@@ -13,10 +13,10 @@ mojo = "*"
 [pypi-dependencies]
 eth-keys = "*"
 eth-hash = {version = "*", extras = ["pycryptodome"]}
-rlp = "*"
 pycryptodome = "*"
 cryptography = "*"
 rlp = "*"
+web3 = "*"
 
 # Main test tasks that run everything
 [tasks.test]
