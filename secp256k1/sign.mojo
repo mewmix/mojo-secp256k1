@@ -373,7 +373,7 @@ fn int_to_bytes32_be(value: BigInt) raises -> List[Int]:
 
 fn int_to_bytes(value: BigInt) raises -> List[Int]:
     if value == 0:
-        return [0].copy()
+        return List[Int]()
     var v = value
     var out = List[Int]()
     while v > 0:

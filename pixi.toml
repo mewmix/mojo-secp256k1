@@ -18,6 +18,9 @@ cryptography = "*"
 rlp = "*"
 web3 = "*"
 
+[tasks.send-tx]
+cmd = "mojo -I . -I decimojo/src -I keccak create_signed_tx.mojo"
+
 # Main test tasks that run everything
 [tasks.test]
 cmd = ".pixi/envs/default/bin/python python_tests/run_all.py"

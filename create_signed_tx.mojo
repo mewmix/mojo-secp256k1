@@ -1,6 +1,7 @@
 from secp256k1.sign import ecdsa_sign_keccak, int_to_bytes
 from keccak import keccak256_bytes
 from decimojo import BigInt
+from json_rpc import send_raw_transaction
 
 fn hex_to_int(hex_char: String) -> Int:
     for c in hex_char.lower().codepoints():
@@ -33,8 +34,6 @@ fn rlp_encode_list(items: List[List[Int]]) raises -> List[Int]:
     var payload = List[Int]()
     for item in items:
         if len(item) == 0:
-            payload.append(0x80)
-        elif len(item) == 1 and item[0] == 0:
             payload.append(0x80)
         else:
             payload.extend(rlp_encode_bytes(item.copy()))
@@ -106,8 +105,8 @@ fn main() raises:
     )
     var rlp_signed_tx = rlp_encode_list(signed_tx)
 
-    for b in rlp_signed_tx:
-        print(b, end=" ")
+    var response = send_raw_transaction(rlp_signed_tx)
+    print(response)
 
 fn __main__() raises:
     main()
