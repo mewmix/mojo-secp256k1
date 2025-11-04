@@ -311,3 +311,17 @@ fn sc_modulus_bytes32() -> List[Int]:
         for j in range(8):
             out[31 - (k * 8 + j)] = Int((limb >> UInt64(j * 8)) & UInt64(0xFF))
     return out.copy()
+
+@always_inline
+fn sc_is_odd(a: Sc) -> Bool:
+    return (a.v[0] & 1) == 1
+
+fn sc_shr1(out r: Sc, a: Sc):
+    r.v[0] = (a.v[0] >> 1) | (a.v[1] << 63)
+    r.v[1] = (a.v[1] >> 1) | (a.v[2] << 63)
+    r.v[2] = (a.v[2] >> 1) | (a.v[3] << 63)
+    r.v[3] = (a.v[3] >> 1)
+
+fn sc_add_u64(a: Sc, c: UInt64) -> Sc:
+    var b = InlineArray[UInt64,4](c, 0, 0, 0)
+    return sc_from_limbs(sc_add_raw(a.v, b))

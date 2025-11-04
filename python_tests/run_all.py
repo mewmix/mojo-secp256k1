@@ -17,6 +17,10 @@ VERIFY_TESTS = [
     ("test_sign_dump.mojo", "python_tests/verify_eth_keys.py"),
     # Generate recoverable signatures and verify recovery
     ("test_recover_dump.mojo", "python_tests/recover_and_compare.py"),
+    # EIP-1559 signing
+    ("tests/test_eip1559.mojo", "python_tests/verify_eip1559.py"),
+    # Legacy signing
+    ("tests/test_legacy.mojo", "python_tests/verify_legacy.py"),
 ]
 
 # Known-answer tests and benchmarks
